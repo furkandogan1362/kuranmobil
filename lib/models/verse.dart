@@ -21,29 +21,32 @@ class Verse {
   });
 
   factory Verse.fromJson(Map<String, dynamic> json) {
-    // Yeni API formatı (acikkuran.com)
+    // JSON dosyası formatı (all_verses.json)
     final surahId = json['surah_id'] ?? 1;
-    final verseNum = json['verse_number'] ?? 1;
+    final verseNum = json['verse_id_in_surah'] ?? 1;
     final verseKey = '$surahId:$verseNum';
     
-    // Arapça metin - "verse" field'ı (harekeli)
-    String textUthmani = json['verse'] ?? '';
+    // Arapça metin - "arabic_script" objesinden
+    String textUthmani = '';
+    if (json['arabic_script'] != null && json['arabic_script']['text'] != null) {
+      textUthmani = json['arabic_script']['text'] ?? '';
+    }
     
-    // Türkçe meal - translation objesinden
+    // Türkçe meal - "translation" objesinden
     String translationTurkish = '';
-    if (json['translation'] != null) {
+    if (json['translation'] != null && json['translation']['text'] != null) {
       translationTurkish = json['translation']['text'] ?? '';
     }
     
     return Verse(
-      id: json['id'] ?? 0,
+      id: (surahId * 1000) + verseNum, // Benzersiz ID oluştur
       verseNumber: verseNum,
       chapterId: surahId,
       verseKey: verseKey,
       textUthmani: textUthmani,
       translationTurkish: translationTurkish,
-      pageNumber: (json['page'] ?? 0) == 0 ? 1 : json['page'], // Fatiha için sayfa 0 -> 1'e çevir
-      juzNumber: json['juz_number'] ?? 1,
+      pageNumber: json['page_number'] ?? 1,
+      juzNumber: 1, // JSON'da juz bilgisi yok, varsayılan 1
     );
   }
   

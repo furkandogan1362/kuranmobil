@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'screens/home_screen.dart';
 
 void main() {
@@ -8,7 +7,7 @@ void main() {
   
   // Sistem UI ayarları
   SystemChrome.setSystemUIOverlayStyle(
-    SystemUiOverlayStyle(
+    const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
     ),
@@ -27,10 +26,27 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: Color(0xFF1a237e),
+          seedColor: const Color(0xFF1a237e),
           brightness: Brightness.light,
         ),
-        textTheme: GoogleFonts.notoSansTextTheme(),
+        fontFamily: 'Roboto', // Sistem fontu (offline)
+        textTheme: const TextTheme(
+          bodyLarge: TextStyle(fontFamily: 'Roboto'),
+          bodyMedium: TextStyle(fontFamily: 'Roboto'),
+          bodySmall: TextStyle(fontFamily: 'Roboto'),
+          displayLarge: TextStyle(fontFamily: 'Roboto'),
+          displayMedium: TextStyle(fontFamily: 'Roboto'),
+          displaySmall: TextStyle(fontFamily: 'Roboto'),
+          headlineLarge: TextStyle(fontFamily: 'Roboto'),
+          headlineMedium: TextStyle(fontFamily: 'Roboto'),
+          headlineSmall: TextStyle(fontFamily: 'Roboto'),
+          titleLarge: TextStyle(fontFamily: 'Roboto'),
+          titleMedium: TextStyle(fontFamily: 'Roboto'),
+          titleSmall: TextStyle(fontFamily: 'Roboto'),
+          labelLarge: TextStyle(fontFamily: 'Roboto'),
+          labelMedium: TextStyle(fontFamily: 'Roboto'),
+          labelSmall: TextStyle(fontFamily: 'Roboto'),
+        ),
         useMaterial3: true,
       ),
       home: const HomeScreen(),

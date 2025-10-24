@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'quran_reader_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -31,7 +30,7 @@ class HomeScreen extends StatelessWidget {
                   children: [
                     Text(
                       'Hoş Geldiniz',
-                      style: GoogleFonts.notoNaskhArabic(
+                      style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
@@ -42,7 +41,7 @@ class HomeScreen extends StatelessWidget {
                     SizedBox(height: 8),
                     Text(
                       'İslami Kaynaklarınız',
-                      style: GoogleFonts.notoSans(
+                      style: TextStyle(
                         fontSize: 16,
                         color: Colors.white70,
                       ),
@@ -64,7 +63,7 @@ class HomeScreen extends StatelessWidget {
                         // Kur'an-ı Kerim Kartı
                         _buildFeatureCard(
                           context: context,
-                          title: 'Kur\'an-ı Kerim',
+                          title: 'Kur\'an-ı Kerim ve Meali',
                           subtitle: 'Mushaf-ı Şerif',
                           icon: Icons.book,
                           gradientColors: [
@@ -178,17 +177,19 @@ class HomeScreen extends StatelessWidget {
                       children: [
                         Text(
                           title,
-                          style: GoogleFonts.notoNaskhArabic(
-                            fontSize: 28,
+                          style: const TextStyle(
+                            fontSize: 24,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        SizedBox(height: 8),
+                        const SizedBox(height: 4),
                         Text(
                           subtitle,
-                          style: GoogleFonts.notoSans(
-                            fontSize: 14,
+                          style: const TextStyle(
+                            fontSize: 13,
                             color: Colors.white70,
                           ),
                         ),

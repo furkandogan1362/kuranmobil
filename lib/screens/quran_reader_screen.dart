@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../models/chapter.dart';
 import '../models/verse.dart';
-import '../services/quran_api_service.dart';
+import '../services/quran_json_service.dart';
 
 class QuranReaderScreen extends StatefulWidget {
   const QuranReaderScreen({super.key});
@@ -13,29 +12,65 @@ class QuranReaderScreen extends StatefulWidget {
 }
 
 class _QuranReaderScreenState extends State<QuranReaderScreen> {
-  final QuranApiService _apiService = QuranApiService();
-  final PageController _pageController = PageController(initialPage: 0);
+  final QuranJsonService _jsonService = QuranJsonService();
+  late PageController _pageController;
   final ScrollController _paginationScrollController = ScrollController();
   
   static const int totalPages = 604; // Kuran'ın toplam sayfa sayısı
   
   Map<int, List<Verse>> _pageVerses = {}; // Sayfa numarası -> Ayetler
   Map<int, Chapter> _pageChapters = {}; // Sayfa numarası -> Sure bilgisi
+  Map<int, Chapter> _chapterCache = {}; // Sure ID -> Sure bilgisi (yeni)
   int _currentPage = 1; // 1'den başlıyor
+  int _initialPage = 0; // Son okunan sayfa
   bool _isLoading = true;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _loadInitialPage();
+    _loadLastPageAndInit();
+  }
+
+  Future<void> _loadLastPageAndInit() async {
+    // Son okunan sayfayı al
+    final lastPage = await QuranJsonService.getLastReadPage();
+    setState(() {
+      _currentPage = lastPage;
+      _initialPage = lastPage - 1; // PageController index 0'dan başlar
+    });
+    
+    // PageController'ı başlat
+    _pageController = PageController(initialPage: _initialPage);
+    
+    // Sayfa verilerini yükle
+    await _loadInitialPage();
   }
 
   Future<void> _loadInitialPage() async {
-    await _loadPageData(1);
-    // İlk birkaç sayfayı önceden yükle
-    _loadPageData(2);
-    _loadPageData(3);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    
+    try {
+      // Mevcut sayfayı yükle
+      await _loadPageData(_currentPage);
+      
+      setState(() {
+        _isLoading = false;
+      });
+      
+      // Önceki ve sonraki sayfaları önceden yükle (background)
+      if (_currentPage > 1) _loadPageData(_currentPage - 1);
+      if (_currentPage < totalPages) _loadPageData(_currentPage + 1);
+      if (_currentPage + 1 < totalPages) _loadPageData(_currentPage + 2);
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Veriler yüklenirken hata oluştu: $e';
+      });
+    }
   }
 
   Future<void> _loadPageData(int pageNumber) async {
@@ -44,36 +79,32 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
     }
 
     try {
-      if (pageNumber == 1 && _isLoading) {
-        setState(() {
-          _isLoading = true;
-          _errorMessage = null;
-        });
-      }
-
       // Sayfa ayetlerini çek
-      final verses = await _apiService.getVersesByPage(pageNumber);
+      final verses = await _jsonService.getVersesByPage(pageNumber);
       
-      // Bu sayfadaki ilk ayetin suresini bul (cache'den)
+      // Bu sayfadaki tüm surelerin chapter bilgilerini yükle
       if (verses.isNotEmpty) {
-        final chapterId = verses[0].chapterId;
-        final chapter = await _apiService.getChapterFromCache(chapterId);
+        // İlk ayetin suresini bu sayfanın ana suresi olarak kaydet
+        final mainChapterId = verses[0].chapterId;
+        final mainChapter = await _jsonService.getChapterFromCache(mainChapterId);
+        
+        // Sayfadaki benzersiz sure ID'lerini bul
+        final uniqueChapterIds = verses.map((v) => v.chapterId).toSet();
+        
+        // Her sure için chapter bilgisini cache'e ekle
+        for (final chapterId in uniqueChapterIds) {
+          if (!_chapterCache.containsKey(chapterId)) {
+            final chapter = await _jsonService.getChapterFromCache(chapterId);
+            _chapterCache[chapterId] = chapter;
+          }
+        }
         
         setState(() {
           _pageVerses[pageNumber] = verses;
-          _pageChapters[pageNumber] = chapter;
-          if (pageNumber == 1) {
-            _isLoading = false;
-          }
+          _pageChapters[pageNumber] = mainChapter; // Sayfanın ana suresi
         });
       }
     } catch (e) {
-      if (pageNumber == 1) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = 'Veriler yüklenirken hata oluştu: $e';
-        });
-      }
       print('Sayfa $pageNumber yüklenirken hata: $e');
     }
   }
@@ -83,6 +114,9 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
     setState(() {
       _currentPage = pageNumber;
     });
+
+    // Son okunan sayfayı kaydet
+    QuranJsonService.saveLastReadPage(pageNumber);
 
     // Mevcut sayfayı yükle
     _loadPageData(pageNumber);
@@ -114,6 +148,9 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
   }
 
   void _goToPage(int pageNumber) {
+    // Sayfayı kaydet
+    QuranJsonService.saveLastReadPage(pageNumber);
+    
     _pageController.animateToPage(
       pageNumber - 1, // PageView index 0'dan başlar
       duration: Duration(milliseconds: 400),
@@ -147,7 +184,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                 SizedBox(height: 24),
                 Text(
                   'Kur\'an-ı Kerim yükleniyor...',
-                  style: GoogleFonts.notoSans(
+                  style: TextStyle(
                     fontSize: 18,
                     color: Colors.white,
                     fontWeight: FontWeight.w500,
@@ -190,7 +227,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                   Text(
                     _errorMessage!,
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.notoSans(
+                    style: TextStyle(
                       fontSize: 16,
                       color: Colors.white,
                     ),
@@ -256,7 +293,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                             SizedBox(height: 16),
                             Text(
                               'Sayfa $pageNumber yükleniyor...',
-                              style: GoogleFonts.notoSans(
+                              style: TextStyle(
                                 fontSize: 16,
                                 color: Colors.black54,
                               ),
@@ -307,7 +344,8 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                     children: [
                       Text(
                         chapter?.nameArabic ?? '...',
-                        style: GoogleFonts.amiriQuran(
+                        style: TextStyle(
+                          fontFamily: 'ShaikhHamdullah',
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF1a237e),
@@ -317,7 +355,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                       SizedBox(height: 4),
                       Text(
                         chapter?.nameTurkish ?? 'Yükleniyor...',
-                        style: GoogleFonts.notoSans(
+                        style: TextStyle(
                           fontSize: 14,
                           color: Colors.black54,
                         ),
@@ -326,7 +364,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                       SizedBox(height: 2),
                       Text(
                         'Sayfa $_currentPage',
-                        style: GoogleFonts.notoSans(
+                        style: TextStyle(
                           fontSize: 12,
                           color: Colors.black38,
                         ),
@@ -375,7 +413,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                     child: Center(
                       child: Text(
                         '$pageNum',
-                        style: GoogleFonts.notoSans(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: isSelected ? Colors.white : Colors.black54,
@@ -398,9 +436,6 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
   }
 
   Widget _buildQuranPage(int pageNumber, Chapter chapter, List<Verse> verses) {
-    // Besmele sabiti (Türk alfabesi formatı - API'den gelen)
-    const besmele = 'بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّح۪يمِ';
-    
     // Sayfadaki ayetleri gruplara ayır (sure başlangıçlarına göre)
     List<Widget> pageContent = [];
     int? lastChapterId;
@@ -410,40 +445,9 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
       if (verse.chapterId != lastChapterId) {
         // Sure değişti
         if (verse.verseNumber == 1) {
-          // Sure başlangıcı
-          // Fatiha için de besmele göster, Tevbe hariç
-          if (verse.chapterId != 9) {
-            pageContent.add(
-              Padding(
-                padding: const EdgeInsets.only(bottom: 24, top: 16),
-                child: Container(
-                  padding: EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Color(0xFF1a237e).withOpacity(0.05),
-                        Color(0xFF2E7D32).withOpacity(0.05),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text(
-                    besmele,
-                    style: GoogleFonts.amiriQuran(
-                      fontSize: 32,
-                      height: 2,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1a237e),
-                    ),
-                    textAlign: TextAlign.center,
-                    textDirection: TextDirection.rtl,
-                  ),
-                ).animate()
-                  .fadeIn(duration: 800.ms)
-                  .scale(begin: Offset(0.9, 0.9), end: Offset(1, 1)),
-              ),
-            );
-          }
+          // Sure başlangıcı - Sure adını ve besmeleyi göster
+          // Tevbe hariç (Tevbe suresinde besmele yok)
+          pageContent.add(_buildSurahHeader(verse.chapterId));
         }
         lastChapterId = verse.chapterId;
       }
@@ -463,7 +467,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
             padding: const EdgeInsets.only(top: 16, bottom: 8),
             child: Text(
               '$pageNumber',
-              style: GoogleFonts.notoSans(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF2E7D32),
@@ -472,6 +476,66 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSurahHeader(int chapterId) {
+    // Besmele metni
+    const besmele = 'بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّح۪يمِ';
+    
+    // Sure bilgisini cache'den al
+    final chapter = _chapterCache[chapterId];
+    
+    // Eğer cache'de yoksa, varsayılan bir isim kullan
+    final surahName = chapter?.nameTurkish ?? 'Yükleniyor...';
+    
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24, top: 16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFF1a237e).withOpacity(0.05),
+              const Color(0xFF2E7D32).withOpacity(0.05),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          children: [
+            // Sure adı (Türkçe)
+            Text(
+              '$surahName Sûresi',
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1a237e),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            
+            // Tevbe suresi hariç besmele göster
+            if (chapterId != 9) ...[
+              const SizedBox(height: 16),
+              Text(
+                besmele,
+                style: const TextStyle(
+                  fontFamily: 'ShaikhHamdullah',
+                  fontSize: 32,
+                  height: 2,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1a237e),
+                ),
+                textAlign: TextAlign.center,
+                textDirection: TextDirection.rtl,
+              ),
+            ],
+          ],
+        ),
+      ).animate()
+        .fadeIn(duration: 800.ms)
+        .scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1)),
     );
   }
 
@@ -507,7 +571,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                   child: Center(
                     child: Text(
                       '${verse.verseNumber}',
-                      style: GoogleFonts.notoSans(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF2E7D32),
@@ -532,7 +596,8 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                       children: [
                         TextSpan(
                           text: verse.textUthmani,
-                          style: GoogleFonts.amiriQuran(
+                          style: TextStyle(
+                            fontFamily: 'ShaikhHamdullah',
                             fontSize: 32,
                             height: 2.2,
                             fontWeight: FontWeight.w500,
@@ -555,7 +620,8 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                             ),
                             child: Text(
                               verse.getArabicVerseNumber(),
-                              style: GoogleFonts.amiriQuran(
+                              style: TextStyle(
+                                fontFamily: 'ShaikhHamdullah',
                                 fontSize: 18,
                                 color: Color(0xFF2E7D32),
                                 fontWeight: FontWeight.bold,
@@ -585,7 +651,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                 ),
                 child: Text(
                   verse.translationTurkish,
-                  style: GoogleFonts.notoSans(
+                  style: TextStyle(
                     fontSize: 16,
                     height: 1.8,
                     color: Colors.black87,
