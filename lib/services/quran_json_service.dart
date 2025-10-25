@@ -148,7 +148,7 @@ class QuranJsonService {
     108: {'arabic': 'الكَوْثَر', 'turkish': 'Kevser'},
     109: {'arabic': 'الكَافِرُون', 'turkish': 'Kâfirûn'},
     110: {'arabic': 'النَّصْر', 'turkish': 'Nasr'},
-    111: {'arabic': 'المَسَد', 'turkish': 'Mesed'},
+    111: {'arabic': 'المَسَد', 'turkish': 'Tebbet'},
     112: {'arabic': 'الإخْلَاص', 'turkish': 'İhlâs'},
     113: {'arabic': 'الفَلَق', 'turkish': 'Felak'},
     114: {'arabic': 'النَّاس', 'turkish': 'Nâs'},

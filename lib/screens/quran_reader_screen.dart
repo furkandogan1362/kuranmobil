@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../models/chapter.dart';
 import '../models/verse.dart';
 import '../services/quran_json_service.dart';
+import '../widgets/surah_list_sheet.dart';
 
 class QuranReaderScreen extends StatefulWidget {
   const QuranReaderScreen({super.key});
@@ -21,8 +22,11 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
   Map<int, List<Verse>> _pageVerses = {}; // Sayfa numarası -> Ayetler
   Map<int, Chapter> _pageChapters = {}; // Sayfa numarası -> Sure bilgisi
   Map<int, Chapter> _chapterCache = {}; // Sure ID -> Sure bilgisi (yeni)
+  Map<int, Map<int, GlobalKey>> _pageKeys = {}; // Sayfa numarası -> (Sure ID -> GlobalKey)
   int _currentPage = 1; // 1'den başlıyor
   int _initialPage = 0; // Son okunan sayfa
+  int? _lastSelectedChapterId; // Son seçilen sure ID'si
+  int? _scrollToChapterId; // Bu sayfada hangi sureye scroll yapılacak
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -59,6 +63,12 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
       
       setState(() {
         _isLoading = false;
+      });
+      
+      // Pagination scroll'u doğru konuma getir
+      // Widget'ların build edilmesi için kısa bir gecikme ekleyelim
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollPaginationToPage(_currentPage);
       });
       
       // Önceki ve sonraki sayfaları önceden yükle (background)
@@ -147,15 +157,66 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
     }
   }
 
-  void _goToPage(int pageNumber) {
+  void _goToPage(int pageNumber, {int? targetChapterId}) {
     // Sayfayı kaydet
     QuranJsonService.saveLastReadPage(pageNumber);
+    
+    // Hedef sure ID'sini kaydet
+    _scrollToChapterId = targetChapterId;
     
     _pageController.animateToPage(
       pageNumber - 1, // PageView index 0'dan başlar
       duration: Duration(milliseconds: 400),
       curve: Curves.easeInOut,
     );
+  }
+
+  // Sure listesini göster
+  void _showSurahList() {
+    // Son seçilen sure ID'sini kullan, yoksa mevcut sayfanın ilk suresini kullan
+    final currentChapterId = _lastSelectedChapterId ?? _pageChapters[_currentPage]?.id ?? 1;
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => SurahListSheet(
+        currentChapterId: currentChapterId,
+        onSurahSelected: (pageNumber, chapterId) {
+          // Seçilen sure ID'sini kaydet
+          _lastSelectedChapterId = chapterId;
+          
+          // Eğer aynı sayfadaysak, sadece scroll yap
+          if (pageNumber == _currentPage) {
+            setState(() {
+              _scrollToChapterId = chapterId;
+            });
+            // Scroll işlemini tetikle
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _performScrollToChapter(chapterId);
+            });
+          } else {
+            // Farklı sayfaya git
+            _goToPage(pageNumber, targetChapterId: chapterId);
+          }
+        },
+      ),
+    );
+  }
+  
+  // Sure başlangıcına scroll yap
+  void _performScrollToChapter(int chapterId) {
+    if (_pageKeys[_currentPage]?.containsKey(chapterId) == true) {
+      final key = _pageKeys[_currentPage]![chapterId];
+      if (key?.currentContext != null) {
+        Scrollable.ensureVisible(
+          key!.currentContext!,
+          duration: Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+          alignment: 0.0,
+        );
+      }
+    }
   }
 
   @override
@@ -373,7 +434,12 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                     ],
                   ),
                 ),
-                SizedBox(width: 48), // Dengeli görünüm için
+                // Sure listesi butonu
+                IconButton(
+                  icon: Icon(Icons.list_rounded, color: Color(0xFF2E7D32)),
+                  onPressed: _showSurahList,
+                  tooltip: 'Sureler',
+                ),
               ],
             ),
           ),
@@ -436,6 +502,11 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
   }
 
   Widget _buildQuranPage(int pageNumber, Chapter chapter, List<Verse> verses) {
+    // Bu sayfa için sure başlangıç key'lerini sakla
+    if (!_pageKeys.containsKey(pageNumber)) {
+      _pageKeys[pageNumber] = {};
+    }
+    
     // Sayfadaki ayetleri gruplara ayır (sure başlangıçlarına göre)
     List<Widget> pageContent = [];
     int? lastChapterId;
@@ -445,15 +516,38 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
       if (verse.chapterId != lastChapterId) {
         // Sure değişti
         if (verse.verseNumber == 1) {
+          // Sure başlangıcı için GlobalKey oluştur
+          final key = GlobalKey();
+          _pageKeys[pageNumber]![verse.chapterId] = key;
+          
           // Sure başlangıcı - Sure adını ve besmeleyi göster
           // Tevbe hariç (Tevbe suresinde besmele yok)
-          pageContent.add(_buildSurahHeader(verse.chapterId));
+          pageContent.add(_buildSurahHeader(verse.chapterId, key: key));
         }
         lastChapterId = verse.chapterId;
       }
       
       // Ayeti ekle
       pageContent.add(_buildVerseWidget(verse));
+    }
+    
+    // Eğer hedef sure ID'si varsa ve bu sayfada varsa, scroll yap
+    if (_scrollToChapterId != null && _pageKeys[pageNumber]?.containsKey(_scrollToChapterId) == true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final key = _pageKeys[pageNumber]![_scrollToChapterId];
+        if (key?.currentContext != null) {
+          Scrollable.ensureVisible(
+            key!.currentContext!,
+            duration: Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+            alignment: 0.0, // En üste scroll et
+          );
+          // Hedef sure ID'sini temizle
+          setState(() {
+            _scrollToChapterId = null;
+          });
+        }
+      });
     }
     
     return SingleChildScrollView(
@@ -479,7 +573,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
     );
   }
 
-  Widget _buildSurahHeader(int chapterId) {
+  Widget _buildSurahHeader(int chapterId, {GlobalKey? key}) {
     // Besmele metni
     const besmele = 'بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّح۪يمِ';
     
@@ -490,6 +584,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
     final surahName = chapter?.nameTurkish ?? 'Yükleniyor...';
     
     return Padding(
+      key: key, // GlobalKey'i en dış widget'a ekle
       padding: const EdgeInsets.only(bottom: 24, top: 16),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
