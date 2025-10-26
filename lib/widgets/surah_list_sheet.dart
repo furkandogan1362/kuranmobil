@@ -51,26 +51,30 @@ class _SurahListSheetState extends State<SurahListSheet> {
 
     // Widget build edildikten sonra scroll pozisyonunu ayarla
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToLastSelectedSurah();
+      _scrollToCurrentSurah();
     });
   }
 
-  // Kaydedilmiş surenin pozisyonuna git
-  Future<void> _scrollToLastSelectedSurah() async {
+  // Mevcut surenin pozisyonuna git (currentChapterId kullanarak)
+  void _scrollToCurrentSurah() {
     if (!_scrollController.hasClients || _chapters == null) return;
     
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final savedIndex = prefs.getInt(_lastSurahIndexKey);
+      // currentChapterId'ye karşılık gelen index'i bul (ID 1'den başlar, index 0'dan)
+      final currentIndex = widget.currentChapterId - 1;
       
-      if (savedIndex != null && savedIndex >= 0 && savedIndex < _chapters!.length) {
-        // Seçili surenin biraz üstünden başlat (mavi başlığa yapışık olması için)
-        final targetIndex = savedIndex - 2;
+      if (currentIndex >= 0 && currentIndex < _chapters!.length) {
+        // Seçili surenin biraz üstünden başlat (başlığa yapışık olması için)
+        final targetIndex = currentIndex - 2;
         final position = (targetIndex > 0 ? targetIndex * _itemExtent : 0.0).toDouble();
         
-        print('📜 Kaydedilmiş sure index: $savedIndex, Scroll pozisyonu: $position');
+        // Max scroll pozisyonunu kontrol et
+        final maxScroll = _scrollController.position.maxScrollExtent;
+        final finalPosition = position > maxScroll ? maxScroll : position;
         
-        _scrollController.jumpTo(position);
+        print('📜 Mevcut sure ID: ${widget.currentChapterId}, Index: $currentIndex, Scroll pozisyonu: $finalPosition');
+        
+        _scrollController.jumpTo(finalPosition);
       }
     } catch (e) {
       print('❌ Scroll pozisyonu hatası: $e');

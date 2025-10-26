@@ -20,6 +20,7 @@ class QuranJsonService {
   
   // SharedPreferences key
   static const String _lastPageKey = 'last_read_page';
+  static const String _lastScrollPositionKey = 'last_scroll_position';
   
   // Son okunan sayfayı kaydet
   static Future<void> saveLastReadPage(int pageNumber) async {
@@ -34,6 +35,28 @@ class QuranJsonService {
     final page = prefs.getInt(_lastPageKey) ?? 1;
     print('📖 Son okunan sayfa: $page');
     return page;
+  }
+  
+  // Son okunan sayfanın scroll pozisyonunu kaydet
+  static Future<void> saveLastScrollPosition(int pageNumber, double scrollPosition) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('${_lastScrollPositionKey}_$pageNumber', scrollPosition);
+    print('📍 Sayfa $pageNumber scroll pozisyonu kaydedildi: $scrollPosition');
+  }
+  
+  // Son okunan sayfanın scroll pozisyonunu getir
+  static Future<double> getLastScrollPosition(int pageNumber) async {
+    final prefs = await SharedPreferences.getInstance();
+    final position = prefs.getDouble('${_lastScrollPositionKey}_$pageNumber') ?? 0.0;
+    print('📍 Sayfa $pageNumber scroll pozisyonu yüklendi: $position');
+    return position;
+  }
+  
+  // Scroll pozisyonunu temizle (sayfa tamamen okunduğunda)
+  static Future<void> clearScrollPosition(int pageNumber) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('${_lastScrollPositionKey}_$pageNumber');
+    print('🗑️ Sayfa $pageNumber scroll pozisyonu temizlendi');
   }
   
   // Sure isimleri (manuel tanımlı)

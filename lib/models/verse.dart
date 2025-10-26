@@ -59,4 +59,27 @@ class Verse {
         .map((digit) => arabicDigits[int.parse(digit)])
         .join();
   }
+  
+  // Secde ayeti mi kontrol et
+  bool isSajdahVerse() {
+    // Secde ayetleri listesi (Sure ID : Ayet numarası)
+    const sajdahVerses = {
+      7: 206,   // A'râf
+      13: 15,   // Ra'd
+      16: 49,   // Nahl
+      17: 107,  // İsrâ
+      19: 58,   // Meryem
+      22: 18,   // Hacc
+      25: 60,   // Furkan
+      27: 25,   // Neml
+      32: 15,   // Secde
+      38: 24,   // Sâd
+      41: 37,   // Fussılet
+      53: 62,   // Necm
+      84: 21,   // İnşikak
+      96: 19,   // Alâk
+    };
+    
+    return sajdahVerses[chapterId] == verseNumber;
+  }
 }

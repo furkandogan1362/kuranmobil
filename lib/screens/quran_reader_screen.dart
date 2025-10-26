@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/chapter.dart';
@@ -23,12 +24,18 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
   Map<int, Chapter> _pageChapters = {}; // Sayfa numarası -> Sure bilgisi
   Map<int, Chapter> _chapterCache = {}; // Sure ID -> Sure bilgisi (yeni)
   Map<int, Map<int, GlobalKey>> _pageKeys = {}; // Sayfa numarası -> (Sure ID -> GlobalKey)
+  Map<int, ScrollController> _pageScrollControllers = {}; // Her sayfa için ayrı ScrollController
   int _currentPage = 1; // 1'den başlıyor
   int _initialPage = 0; // Son okunan sayfa
   int? _lastSelectedChapterId; // Son seçilen sure ID'si
   int? _scrollToChapterId; // Bu sayfada hangi sureye scroll yapılacak
+  int? _currentVisibleChapterId; // Şu anda görünür olan sure ID'si
   bool _isLoading = true;
   String? _errorMessage;
+  
+  // Scroll pozisyonu kaydetme için debounce timer
+  Timer? _scrollSaveTimer;
+  static const Duration _scrollSaveDelay = Duration(milliseconds: 500);
 
   @override
   void initState() {
@@ -63,12 +70,34 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
       
       setState(() {
         _isLoading = false;
+        // İlk yüklemede görünür sure ID'sini sayfanın ilk suresi olarak ayarla
+        _currentVisibleChapterId = _pageChapters[_currentPage]?.id;
+        // Sure listesi vurgulamasını da ayarla
+        _lastSelectedChapterId = _pageChapters[_currentPage]?.id;
       });
       
-      // Pagination scroll'u doğru konuma getir
+      // Pagination scroll'u doğru konuma getir ve son scroll pozisyonuna git
       // Widget'ların build edilmesi için kısa bir gecikme ekleyelim
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
         _scrollPaginationToPage(_currentPage);
+        
+        // Son okunan sayfanın kaydedilmiş scroll pozisyonuna git
+        final scrollController = _pageScrollControllers[_currentPage];
+        if (scrollController != null && scrollController.hasClients) {
+          final savedPosition = await QuranJsonService.getLastScrollPosition(_currentPage);
+          if (savedPosition > 0) {
+            // Sayfanın tamamen render edilmesi için kısa gecikme
+            await Future.delayed(Duration(milliseconds: 300));
+            if (scrollController.hasClients && mounted) {
+              // Smooth scroll ile kaydedilmiş pozisyona git
+              scrollController.animateTo(
+                savedPosition,
+                duration: Duration(milliseconds: 800),
+                curve: Curves.easeInOutCubic,
+              );
+            }
+          }
+        }
       });
       
       // Önceki ve sonraki sayfaları önceden yükle (background)
@@ -121,12 +150,42 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
 
   void _onPageChanged(int index) {
     final pageNumber = index + 1; // Index 0'dan başlar, sayfa 1'den
+    final previousPage = _currentPage;
+    
     setState(() {
       _currentPage = pageNumber;
+      // Sayfa değiştiğinde görünür sure ID'sini sayfanın ilk suresi olarak ayarla
+      _currentVisibleChapterId = _pageChapters[pageNumber]?.id;
+      // Sure listesi vurgulamasını da güncelle
+      _lastSelectedChapterId = _pageChapters[pageNumber]?.id;
     });
 
     // Son okunan sayfayı kaydet
     QuranJsonService.saveLastReadPage(pageNumber);
+    
+    // Önceki sayfanın scroll pozisyonunu temizle (artık o sayfa "son sayfa" değil)
+    if (previousPage != pageNumber) {
+      QuranJsonService.clearScrollPosition(previousPage);
+    }
+    
+    // Yeni sayfanın kaydedilmiş scroll pozisyonuna git (sadece son sayfa için)
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final scrollController = _pageScrollControllers[pageNumber];
+      if (scrollController != null && scrollController.hasClients) {
+        final savedPosition = await QuranJsonService.getLastScrollPosition(pageNumber);
+        if (savedPosition > 0) {
+          // Son sayfa için smooth scroll yap
+          await Future.delayed(Duration(milliseconds: 300));
+          if (scrollController.hasClients && mounted) {
+            scrollController.animateTo(
+              savedPosition,
+              duration: Duration(milliseconds: 800),
+              curve: Curves.easeInOutCubic,
+            );
+          }
+        }
+      }
+    });
 
     // Mevcut sayfayı yükle
     _loadPageData(pageNumber);
@@ -216,6 +275,84 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
           alignment: 0.0,
         );
       }
+    }
+  }
+  
+  // Scroll pozisyonunu kaydetmeyi zamanla (debouncing)
+  void _scheduleScrollSave(int pageNumber) {
+    // Sadece mevcut sayfa için kaydet
+    if (pageNumber != _currentPage) return;
+    
+    // Önceki timer'ı iptal et
+    _scrollSaveTimer?.cancel();
+    
+    // Yeni timer başlat - 500ms sonra kaydet
+    _scrollSaveTimer = Timer(_scrollSaveDelay, () {
+      final scrollController = _pageScrollControllers[pageNumber];
+      if (scrollController != null && scrollController.hasClients) {
+        QuranJsonService.saveLastScrollPosition(pageNumber, scrollController.offset);
+      }
+    });
+  }
+  
+  // Scroll pozisyonuna göre görünür surenin ID'sini güncelle
+  void _updateVisibleChapter(int pageNumber) {
+    if (pageNumber != _currentPage) return; // Sadece aktif sayfa için çalış
+    
+    final scrollController = _pageScrollControllers[pageNumber];
+    if (scrollController == null || !scrollController.hasClients) return;
+    
+    final pageKeysMap = _pageKeys[pageNumber];
+    if (pageKeysMap == null || pageKeysMap.isEmpty) return;
+    
+    // Header yüksekliği (geri butonu + sure adı + pagination)
+    const headerHeight = 180.0;
+    
+    // Eşik değeri - Besmele konteyneri header'ın altına bu kadar yaklaştığında değişsin
+    const threshold = 50.0;
+    
+    // Her sure başlangıcının ekrandaki pozisyonunu kontrol et
+    int? newVisibleChapterId;
+    
+    // Sure ID'lerini sıralı şekilde işle (büyükten küçüğe - en alttaki sureden başla)
+    final sortedChapterIds = pageKeysMap.keys.toList()..sort((a, b) => b.compareTo(a));
+    
+    for (final chapterId in sortedChapterIds) {
+      final key = pageKeysMap[chapterId];
+      final context = key?.currentContext;
+      
+      if (context != null) {
+        try {
+          final RenderBox box = context.findRenderObject() as RenderBox;
+          final position = box.localToGlobal(Offset.zero);
+          
+          // Sure başlangıcının ekrandaki Y pozisyonu
+          final surahTopOnScreen = position.dy;
+          
+          // Eğer sure başlangıcı header'ın altına geldi veya geçtiyse (threshold içinde)
+          if (surahTopOnScreen <= (headerHeight + threshold)) {
+            newVisibleChapterId = chapterId;
+            break; // İlk eşleşeni bulduk, dur
+          }
+        } catch (e) {
+          // RenderBox henüz hazır değilse, geç
+          continue;
+        }
+      }
+    }
+    
+    // Eğer hiçbir sure header'ın altında değilse, sayfanın ilk suresini kullan
+    if (newVisibleChapterId == null && sortedChapterIds.isNotEmpty) {
+      newVisibleChapterId = sortedChapterIds.last; // En küçük ID (sayfanın ilk suresi)
+    }
+    
+    // Eğer görünür sure değiştiyse, state'i güncelle
+    if (newVisibleChapterId != null && newVisibleChapterId != _currentVisibleChapterId) {
+      setState(() {
+        _currentVisibleChapterId = newVisibleChapterId;
+        // Sure listesinde vurgulanan sureyi de güncelle
+        _lastSelectedChapterId = newVisibleChapterId;
+      });
     }
   }
 
@@ -376,7 +513,9 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
   }
 
   Widget _buildFixedHeader() {
-    final chapter = _pageChapters[_currentPage];
+    // Görünür sure ID'si varsa onu kullan, yoksa sayfanın ilk suresini kullan
+    final displayChapterId = _currentVisibleChapterId ?? _pageChapters[_currentPage]?.id;
+    final chapter = displayChapterId != null ? _chapterCache[displayChapterId] : _pageChapters[_currentPage];
     
     return Container(
       decoration: BoxDecoration(
@@ -402,6 +541,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                 ),
                 Expanded(
                   child: Column(
+                    key: ValueKey('header_chapter_$displayChapterId'), // Animasyonu engellemek için key
                     children: [
                       Text(
                         chapter?.nameArabic ?? '...',
@@ -486,11 +626,6 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                         ),
                       ),
                     ),
-                  ).animate(
-                    key: ValueKey('page_$pageNum'),
-                  ).scale(
-                    duration: 200.ms,
-                    curve: Curves.easeOut,
                   ),
                 );
               },
@@ -506,6 +641,20 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
     if (!_pageKeys.containsKey(pageNumber)) {
       _pageKeys[pageNumber] = {};
     }
+    
+    // Bu sayfa için ScrollController oluştur (henüz yoksa)
+    if (!_pageScrollControllers.containsKey(pageNumber)) {
+      final scrollController = ScrollController();
+      _pageScrollControllers[pageNumber] = scrollController;
+      
+      // Scroll listener ekle - sure değişikliklerini algıla
+      scrollController.addListener(() {
+        _updateVisibleChapter(pageNumber);
+        _scheduleScrollSave(pageNumber);
+      });
+    }
+    
+    final scrollController = _pageScrollControllers[pageNumber]!;
     
     // Sayfadaki ayetleri gruplara ayır (sure başlangıçlarına göre)
     List<Widget> pageContent = [];
@@ -551,6 +700,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
     }
     
     return SingleChildScrollView(
+      controller: scrollController,
       padding: EdgeInsets.all(24),
       child: Column(
         children: [
@@ -628,24 +778,44 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
             ],
           ],
         ),
-      ).animate()
-        .fadeIn(duration: 800.ms)
-        .scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1)),
+      ),
     );
   }
 
   Widget _buildVerseWidget(Verse verse) {
+    final isSajdah = verse.isSajdahVerse();
+    
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
       child: Container(
         padding: EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
+          // Secde ayeti için özel gradient arka plan
+          gradient: isSajdah
+              ? LinearGradient(
+                  colors: [
+                    Color(0xFF8E24AA).withOpacity(0.08),
+                    Color(0xFF6A1B9A).withOpacity(0.08),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: isSajdah ? null : Colors.white,
           borderRadius: BorderRadius.circular(16),
+          // Secde ayeti için özel border
+          border: isSajdah
+              ? Border.all(
+                  color: Color(0xFF8E24AA).withOpacity(0.3),
+                  width: 2,
+                )
+              : null,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
+              color: isSajdah 
+                  ? Color(0xFF8E24AA).withOpacity(0.15)
+                  : Colors.black.withOpacity(0.05),
+              blurRadius: isSajdah ? 15 : 10,
               offset: Offset(0, 4),
             ),
           ],
@@ -653,14 +823,16 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Ayet numarası
+            // Ayet numarası ve secde ikonu
             Row(
               children: [
                 Container(
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: Color(0xFF2E7D32).withOpacity(0.1),
+                    color: isSajdah
+                        ? Color(0xFF8E24AA).withOpacity(0.15)
+                        : Color(0xFF2E7D32).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Center(
@@ -669,11 +841,57 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF2E7D32),
+                        color: isSajdah
+                            ? Color(0xFF8E24AA)
+                            : Color(0xFF2E7D32),
                       ),
                     ),
                   ),
                 ),
+                
+                // Secde ayeti işareti
+                if (isSajdah) ...[
+                  SizedBox(width: 12),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Color(0xFF8E24AA),
+                          Color(0xFF6A1B9A),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0xFF8E24AA).withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.motion_photos_pause_rounded,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'SECDE AYETİ',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
             SizedBox(height: 16),
@@ -696,7 +914,9 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                             fontSize: 32,
                             height: 2.2,
                             fontWeight: FontWeight.w500,
-                            color: Colors.black87,
+                            color: isSajdah 
+                                ? Color(0xFF6A1B9A)
+                                : Colors.black87,
                           ),
                         ),
                         TextSpan(text: ' '),
@@ -709,7 +929,9 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: Color(0xFF2E7D32),
+                                color: isSajdah
+                                    ? Color(0xFF8E24AA)
+                                    : Color(0xFF2E7D32),
                                 width: 2,
                               ),
                             ),
@@ -718,7 +940,9 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                               style: TextStyle(
                                 fontFamily: 'ShaikhHamdullah',
                                 fontSize: 18,
-                                color: Color(0xFF2E7D32),
+                                color: isSajdah
+                                    ? Color(0xFF8E24AA)
+                                    : Color(0xFF2E7D32),
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -757,9 +981,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
             ],
           ],
         ),
-      ).animate()
-        .fadeIn(duration: 600.ms)
-        .slideX(begin: 0.1, end: 0),
+      ),
     );
   }
 
@@ -767,6 +989,16 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
   void dispose() {
     _pageController.dispose();
     _paginationScrollController.dispose();
+    
+    // Scroll save timer'ını iptal et
+    _scrollSaveTimer?.cancel();
+    
+    // Tüm sayfa ScrollController'larını temizle
+    for (var controller in _pageScrollControllers.values) {
+      controller.dispose();
+    }
+    _pageScrollControllers.clear();
+    
     super.dispose();
   }
 }
