@@ -7,10 +7,12 @@ import 'settings_menu_sheet.dart';
 /// Font ayarları bottom sheet
 class FontSettingsSheet extends StatefulWidget {
   final Function(double arabicSize, double turkishSize) onFontSizeChanged;
+  final Function(String themeMode)? onThemeChanged;
 
   const FontSettingsSheet({
     super.key,
     required this.onFontSizeChanged,
+    this.onThemeChanged,
   });
 
   @override
@@ -91,6 +93,7 @@ class _FontSettingsSheetState extends State<FontSettingsSheet> {
       backgroundColor: Colors.transparent,
       builder: (context) => SettingsMenuSheet(
         onFontSizeChanged: widget.onFontSizeChanged,
+        onThemeChanged: widget.onThemeChanged, // Callback'i ilet
       ),
     );
   }
@@ -103,7 +106,7 @@ class _FontSettingsSheetState extends State<FontSettingsSheet> {
       return Container(
         height: 500,
         decoration: BoxDecoration(
-          color: isDark ? Color(0xFF1E1E1E) : Colors.white,
+          color: isDark ? Color(0xFF302F30) : Colors.white,
           borderRadius: BorderRadius.only(
             topLeft: Radius.circular(24),
             topRight: Radius.circular(24),
@@ -126,7 +129,7 @@ class _FontSettingsSheetState extends State<FontSettingsSheet> {
       },
       child: Container(
         decoration: BoxDecoration(
-          color: isDark ? Color(0xFF1E1E1E) : Colors.white,
+          color: isDark ? Color(0xFF302F30) : Colors.white,
           borderRadius: BorderRadius.only(
             topLeft: Radius.circular(24),
             topRight: Radius.circular(24),

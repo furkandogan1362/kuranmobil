@@ -26,6 +26,8 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   ThemeMode _themeMode = ThemeMode.system;
+  // GlobalKey ile MaterialApp'i yeniden build etmek için
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -35,20 +37,27 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _loadThemeMode() async {
     final savedThemeMode = await ThemeService.getThemeMode();
-    setState(() {
-      _themeMode = ThemeService.stringToThemeMode(savedThemeMode);
-    });
+    if (mounted) {
+      setState(() {
+        _themeMode = ThemeService.stringToThemeMode(savedThemeMode);
+      });
+    }
   }
 
   void _updateThemeMode(String themeMode) {
-    setState(() {
-      _themeMode = ThemeService.stringToThemeMode(themeMode);
-    });
+    print('🔄 main.dart: Tema güncelleniyor: $themeMode');
+    if (mounted) {
+      setState(() {
+        _themeMode = ThemeService.stringToThemeMode(themeMode);
+      });
+      print('✅ main.dart: setState çağrıldı, yeni tema: $_themeMode');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'Kur\'an-ı Kerim',
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,

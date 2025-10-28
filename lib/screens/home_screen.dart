@@ -19,9 +19,9 @@ class HomeScreen extends StatelessWidget {
             end: Alignment.bottomRight,
             colors: isDark
                 ? [
-                    Color(0xFF1E1E1E), // Ana arka plan
-                    Color(0xFF181818), // Orta ton
-                    Color(0xFF121212), // Koyu arka plan
+                    Color(0xFF242324), // Ana arka plan
+                    Color(0xFF242324), // Orta ton
+                    Color(0xFF242324), // Koyu arka plan
                   ]
                 : [
                     Color(0xFF1a237e), // Koyu mavi

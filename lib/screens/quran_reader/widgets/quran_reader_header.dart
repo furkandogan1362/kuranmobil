@@ -32,7 +32,7 @@ class QuranReaderHeader extends StatelessWidget {
     return Container(
       key: headerKey,
       decoration: BoxDecoration(
-        color: isDark ? Color(0xFF1E1E1E) : Colors.white,
+        color: isDark ? Color(0xFF302F30) : Colors.white,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(isDark ? 0.3 : 0.1),
@@ -60,32 +60,27 @@ class QuranReaderHeader extends StatelessWidget {
                 Expanded(
                   child: Column(
                     key: ValueKey('header_chapter_$displayChapterId'),
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
                         chapter?.nameArabic ?? '...',
                         style: TextStyle(
                           fontFamily: 'ShaikhHamdullah',
-                          fontSize: 26,
+                          fontSize: 30,
                           fontWeight: FontWeight.bold,
                           color: isDark ? Color(0xFF4CAF50) : Color(0xFF1a237e),
                         ),
                         textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 4),
                       Text(
-                        chapter?.nameTurkish ?? 'Yükleniyor...',
+                        chapter?.nameTurkish != null 
+                            ? '${chapter!.nameTurkish} Sûresi'
+                            : 'Yükleniyor...',
                         style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.white.withOpacity(0.6) : Colors.black54,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 1),
-                      Text(
-                        'Sayfa $currentPage',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: isDark ? Colors.white.withOpacity(0.4) : Colors.black38,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white.withOpacity(0.7) : Colors.black87,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -109,7 +104,7 @@ class QuranReaderHeader extends StatelessWidget {
                     Text(
                       'Sureler',
                       style: TextStyle(
-                        fontSize: 9,
+                        fontSize: 12,
                         color: isDark ? Color(0xFF4CAF50) : Color(0xFF2E7D32),
                         fontWeight: FontWeight.w600,
                       ),
@@ -121,48 +116,66 @@ class QuranReaderHeader extends StatelessWidget {
           ),
           SizedBox(
             height: 50,
-            child: ListView.builder(
-              controller: paginationScrollController,
-              scrollDirection: Axis.horizontal,
-              reverse: true,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              itemCount: totalPages,
-              itemBuilder: (context, index) {
-                final pageNum = index + 1;
-                final isSelected = pageNum == currentPage;
-                return GestureDetector(
-                  onTap: () => onPageSelected(pageNum),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    width: 38,
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? (isDark ? Color(0xFF4CAF50) : const Color(0xFF2E7D32))
-                          : (isDark ? Color(0xFF2A2A2A) : Colors.grey.shade200),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: isSelected
-                          ? [
-                              BoxShadow(
-                                color: (isDark ? Color(0xFF4CAF50) : const Color(0xFF2E7D32)).withOpacity(0.3),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Center(
-                      child: Text(
-                        '$pageNum',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Ekran genişliğinden padding'leri çıkar
+                final availableWidth = constraints.maxWidth - 24; // 12px padding her tarafta
+                
+                // 9 kutucuk + aralarındaki boşluklar
+                const visibleBoxCount = 9;
+                const spacing = 4.0; // Kutucuklar arası boşluk
+                const totalSpacing = spacing * (visibleBoxCount - 1);
+                
+                // Her kutucuğun genişliği
+                final boxWidth = (availableWidth - totalSpacing) / visibleBoxCount;
+                
+                return ListView.builder(
+                  controller: paginationScrollController,
+                  scrollDirection: Axis.horizontal,
+                  reverse: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  itemCount: totalPages,
+                  itemBuilder: (context, index) {
+                    final pageNum = index + 1;
+                    final isSelected = pageNum == currentPage;
+                    return GestureDetector(
+                      onTap: () => onPageSelected(pageNum),
+                      child: Container(
+                        margin: EdgeInsets.only(
+                          left: spacing / 2,
+                          right: spacing / 2,
+                        ),
+                        width: boxWidth,
+                        decoration: BoxDecoration(
                           color: isSelected
-                              ? Colors.white
-                              : (isDark ? Colors.white.withOpacity(0.6) : Colors.black54),
+                              ? (isDark ? Color(0xFF4CAF50) : const Color(0xFF2E7D32))
+                              : (isDark ? Color(0xFF3A393A) : Colors.grey.shade200),
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: (isDark ? Color(0xFF4CAF50) : const Color(0xFF2E7D32)).withOpacity(0.3),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '$pageNum',
+                            style: TextStyle(
+                              fontSize: boxWidth > 35 ? 14 : 12, // Küçük ekranlarda font da küçülsün
+                              fontWeight: FontWeight.bold,
+                              color: isSelected
+                                  ? Colors.white
+                                  : (isDark ? Colors.white.withOpacity(0.6) : Colors.black54),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 );
               },
             ),

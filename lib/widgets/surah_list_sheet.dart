@@ -181,7 +181,7 @@ class _SurahListSheetState extends State<SurahListSheet> {
       builder: (context, draggableScrollController) {
         return Container(
           decoration: BoxDecoration(
-            color: isDark ? Color(0xFF1E1E1E) : Colors.white,
+            color: isDark ? Color(0xFF302F30) : Colors.white,
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(24),
               topRight: Radius.circular(24),
@@ -239,7 +239,7 @@ class _SurahListSheetState extends State<SurahListSheet> {
                       curve: Curves.easeInOut,
                       decoration: BoxDecoration(
                         color: isDark 
-                            ? Color(0xFF2A2A2A) 
+                            ? Color(0xFF3A393A) 
                             : Colors.white.withOpacity(0.95),
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
@@ -393,7 +393,7 @@ class _SurahListSheetState extends State<SurahListSheet> {
                   end: Alignment.bottomRight,
                 )
               : null,
-          color: isCurrentChapter ? null : (isDark ? Color(0xFF2A2A2A) : Colors.white),
+          color: isCurrentChapter ? null : (isDark ? Color(0xFF3A393A) : Colors.white),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isCurrentChapter 

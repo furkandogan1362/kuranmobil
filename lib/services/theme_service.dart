@@ -103,12 +103,12 @@ class ThemeService {
       useMaterial3: true,
       brightness: Brightness.dark,
       primaryColor: Color(0xFF4CAF50),
-      scaffoldBackgroundColor: Color(0xFF121212),
+      scaffoldBackgroundColor: Color(0xFF242324), // Ana arka plan
       colorScheme: ColorScheme.dark(
         primary: Color(0xFF4CAF50),
         secondary: Color(0xFF66BB6A),
-        surface: Color(0xFF1E1E1E),
-        background: Color(0xFF121212),
+        surface: Color(0xFF302F30), // Kart/widget arka planı
+        background: Color(0xFF242324), // Ana arka plan
         error: Color(0xFFCF6679),
         onPrimary: Colors.black,
         onSecondary: Colors.black,
@@ -117,11 +117,11 @@ class ThemeService {
         onError: Colors.black,
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: Color(0xFF1E1E1E),
+        backgroundColor: Color(0xFF302F30),
         foregroundColor: Colors.white.withOpacity(0.95),
         elevation: 0,
       ),
-      cardColor: Color(0xFF1E1E1E),
+      cardColor: Color(0xFF302F30), // Kart rengi
       textTheme: TextTheme(
         displayLarge: TextStyle(
           fontSize: 32,

@@ -54,7 +54,11 @@ class _ThemeSettingsSheetState extends State<ThemeSettingsSheet> {
     });
 
     await ThemeService.saveThemeMode(newTheme);
+    
+    // Callback'i çağır
+    print('🎨 Theme değiştiriliyor: $newTheme');
     widget.onThemeChanged(newTheme);
+    print('✅ Callback çağrıldı');
 
     // Kullanıcıya geri bildirim
     if (mounted) {
@@ -101,6 +105,7 @@ class _ThemeSettingsSheetState extends State<ThemeSettingsSheet> {
       backgroundColor: Colors.transparent,
       builder: (context) => SettingsMenuSheet(
         onFontSizeChanged: (_, __) {},
+        onThemeChanged: widget.onThemeChanged, // Callback'i ilet
       ),
     );
   }
@@ -118,7 +123,7 @@ class _ThemeSettingsSheetState extends State<ThemeSettingsSheet> {
       },
       child: Container(
         decoration: BoxDecoration(
-          color: isDark ? Color(0xFF1E1E1E) : Colors.white,
+          color: isDark ? Color(0xFF302F30) : Colors.white,
           borderRadius: BorderRadius.only(
             topLeft: Radius.circular(24),
             topRight: Radius.circular(24),
@@ -252,7 +257,7 @@ class _ThemeSettingsSheetState extends State<ThemeSettingsSheet> {
                       icon: Icons.light_mode_rounded,
                       title: 'Açık Tema',
                       description: 'Parlak ve rahat görünüm',
-                      gradientColors: [Color(0xFFFAF8F3), Color(0xFFF5F1E8)],
+                      gradientColors: [Color(0xFFFFA726), Color(0xFFF57C00)],
                       iconColor: Color(0xFFFFA726),
                       isDark: isDark,
                     ),
@@ -264,7 +269,7 @@ class _ThemeSettingsSheetState extends State<ThemeSettingsSheet> {
                       icon: Icons.dark_mode_rounded,
                       title: 'Koyu Tema',
                       description: 'Göz yormayan karanlık görünüm',
-                      gradientColors: [Color(0xFF1E1E1E), Color(0xFF121212)],
+                      gradientColors: [Color(0xFF302F30), Color(0xFF242324)],
                       iconColor: Color(0xFF7E57C2),
                       isDark: isDark,
                     ),
@@ -273,7 +278,7 @@ class _ThemeSettingsSheetState extends State<ThemeSettingsSheet> {
 
                     _buildThemeCard(
                       theme: ThemeService.themeModeSystem,
-                      icon: Icons.brightness_auto_rounded,
+                      icon: Icons.settings_suggest_rounded,
                       title: 'Sistem',
                       description: 'Cihaz ayarlarını takip et',
                       gradientColors: [Color(0xFF42A5F5), Color(0xFF1976D2)],
@@ -315,7 +320,7 @@ class _ThemeSettingsSheetState extends State<ThemeSettingsSheet> {
         curve: Curves.easeInOut,
         padding: EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isDark ? Color(0xFF2A2A2A) : Colors.white,
+          color: isDark ? Color(0xFF3A393A) : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected
@@ -364,9 +369,7 @@ class _ThemeSettingsSheetState extends State<ThemeSettingsSheet> {
               ),
               child: Icon(
                 icon,
-                color: theme == ThemeService.themeModeDark
-                    ? Colors.white
-                    : iconColor,
+                color: Colors.white, // Her zaman beyaz, gradient üzerinde net görünsün
                 size: 28,
               ),
             ),
@@ -436,7 +439,7 @@ class _ThemeSettingsSheetState extends State<ThemeSettingsSheet> {
     return Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? Color(0xFF2A2A2A) : Colors.grey.shade100,
+        color: isDark ? Color(0xFF3A393A) : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -474,7 +477,7 @@ class _ThemeSettingsSheetState extends State<ThemeSettingsSheet> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: previewIsDark
-                      ? [Color(0xFF2A2A2A), Color(0xFF242424)]
+                      ? [Color(0xFF302F30), Color(0xFF302F30)]
                       : [Color(0xFFFAF8F3), Color(0xFFF5F1E8)],
                 ),
                 borderRadius: BorderRadius.circular(12),

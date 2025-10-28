@@ -19,7 +19,7 @@ class SettingsMenuSheet extends StatelessWidget {
     
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? Color(0xFF1E1E1E) : Colors.white,
+        color: isDark ? Color(0xFF302F30) : Colors.white,
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(24),
           topRight: Radius.circular(24),
@@ -194,6 +194,7 @@ class SettingsMenuSheet extends StatelessWidget {
       backgroundColor: Colors.transparent,
       builder: (context) => FontSettingsSheet(
         onFontSizeChanged: onFontSizeChanged,
+        onThemeChanged: onThemeChanged, // Callback'i ilet!
       ),
     );
   }
@@ -205,6 +206,7 @@ class SettingsMenuSheet extends StatelessWidget {
       backgroundColor: Colors.transparent,
       builder: (context) => ThemeSettingsSheet(
         onThemeChanged: (themeMode) {
+          // Önce callback'i çağır
           if (onThemeChanged != null) {
             onThemeChanged!(themeMode);
           }

@@ -244,12 +244,27 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
     }
 
     // Pagination scroll pozisyonunu güncelle
-    _scrollPaginationToPage(pageNumber);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollPaginationToPage(pageNumber);
+    });
   }
 
   void _scrollPaginationToPage(int pageNumber) {
     if (_paginationScrollController.hasClients) {
-      final position = (pageNumber - 1) * 52.0; // Her item 48px + 4px margin
+      // Ekran genişliğinden hesapla
+      final screenWidth = MediaQuery.of(context).size.width;
+      final availableWidth = screenWidth - 24; // 12px padding her tarafta
+      
+      const visibleBoxCount = 9;
+      const spacing = 4.0;
+      const totalSpacing = spacing * (visibleBoxCount - 1);
+      
+      final boxWidth = (availableWidth - totalSpacing) / visibleBoxCount;
+      final itemWidth = boxWidth + spacing; // Kutu genişliği + spacing
+      
+      final rightPadding = spacing; // Sağdan boşluk
+      final position = (pageNumber - 1) * itemWidth + rightPadding;
+      
       _paginationScrollController.animateTo(
         position,
         duration: Duration(milliseconds: 300),
@@ -343,7 +358,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) => SettingsMenuSheet(
         onFontSizeChanged: _updateFontSizes,
-        onThemeChanged: widget.onThemeChanged,
+        onThemeChanged: widget.onThemeChanged, // Callback'i ilet
       ),
     );
   }
@@ -464,7 +479,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: isDark
-                  ? [Color(0xFF1E1E1E), Color(0xFF121212)]
+                  ? [Color(0xFF242324), Color(0xFF242324)]
                   : [Color(0xFF1a237e), Color(0xFF0d47a1)],
             ),
           ),
@@ -497,7 +512,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: isDark
-                  ? [Color(0xFF1E1E1E), Color(0xFF121212)]
+                  ? [Color(0xFF242324), Color(0xFF242324)]
                   : [Color(0xFF1a237e), Color(0xFF0d47a1)],
             ),
           ),
@@ -543,7 +558,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: isDark
-                    ? [Color(0xFF121212), Color(0xFF181818)]
+                    ? [Color(0xFF242324), Color(0xFF242324)]
                     : [Color(0xFFFAF8F3), Color(0xFFF5F1E8)],
               ),
             ),
@@ -642,7 +657,7 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: isDark
-              ? [Color(0xFF1E1E1E), Color(0xFF1A1A1A)]
+              ? [Color(0xFF302F30), Color(0xFF302F30)]
               : [Colors.white, Colors.grey.shade50],
         ),
         boxShadow: [

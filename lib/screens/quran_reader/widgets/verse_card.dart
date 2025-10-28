@@ -33,7 +33,7 @@ class VerseCard extends StatelessWidget {
                   end: Alignment.bottomRight,
                 )
               : null,
-          color: isSajdah ? null : (isDark ? Color(0xFF2A2A2A) : Colors.white),
+          color: isSajdah ? null : (isDark ? Color(0xFF302F30) : Colors.white),
           borderRadius: BorderRadius.circular(16),
           border: isSajdah
               ? Border.all(
