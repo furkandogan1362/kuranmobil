@@ -103,3 +103,6 @@ flutter:
     - family: ShaikhHamdullah
       fonts:
         - asset: assets/fonts/ShaikhHamdullahMushaf.ttf
+    - family: Elif1
+      fonts:
+        - asset: assets/fonts/Elif1.ttf

@@ -3,21 +3,31 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'quran_reader_screen.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+  final Function(String themeMode)? onThemeChanged;
+  
+  const HomeScreen({super.key, this.onThemeChanged});
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF1a237e), // Koyu mavi
-              Color(0xFF0d47a1), // Orta mavi
-              Color(0xFF01579b), // Açık mavi
-            ],
+            colors: isDark
+                ? [
+                    Color(0xFF1E1E1E), // Ana arka plan
+                    Color(0xFF181818), // Orta ton
+                    Color(0xFF121212), // Koyu arka plan
+                  ]
+                : [
+                    Color(0xFF1a237e), // Koyu mavi
+                    Color(0xFF0d47a1), // Orta mavi
+                    Color(0xFF01579b), // Açık mavi
+                  ],
           ),
         ),
         child: SafeArea(
@@ -76,7 +86,9 @@ class HomeScreen extends StatelessWidget {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const QuranReaderScreen(),
+                                builder: (context) => QuranReaderScreen(
+                                  onThemeChanged: onThemeChanged,
+                                ),
                               ),
                             );
                           },
@@ -123,6 +135,8 @@ class HomeScreen extends StatelessWidget {
     required VoidCallback onTap,
     required int delay,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(24),
@@ -133,11 +147,19 @@ class HomeScreen extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: gradientColors,
+            colors: isDark
+                ? gradientColors.map((color) => Color.lerp(color, Colors.black, 0.4)!).toList()
+                : gradientColors,
           ),
+          border: isDark
+              ? Border.all(
+                  color: gradientColors[1].withOpacity(0.3),
+                  width: 1,
+                )
+              : null,
           boxShadow: [
             BoxShadow(
-              color: gradientColors[1].withOpacity(0.5),
+              color: gradientColors[1].withOpacity(isDark ? 0.2 : 0.5),
               blurRadius: 20,
               offset: Offset(0, 10),
             ),

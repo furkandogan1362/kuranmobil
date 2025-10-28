@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/chapter.dart';
 import '../services/quran_json_service.dart';
+import '../utils/search_helper.dart';
 
 class SurahListSheet extends StatefulWidget {
   final int currentChapterId;
@@ -20,7 +21,11 @@ class SurahListSheet extends StatefulWidget {
 class _SurahListSheetState extends State<SurahListSheet> {
   final QuranJsonService _jsonService = QuranJsonService();
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
   List<Chapter>? _chapters;
+  List<Chapter>? _filteredChapters;
+  bool _isSearching = false;
+  double _savedScrollPosition = 0.0; // Orijinal scroll pozisyonu
   
   // SharedPreferences key
   static const String _lastSurahIndexKey = 'lastSurahIndex';
@@ -32,6 +37,79 @@ class _SurahListSheetState extends State<SurahListSheet> {
   void initState() {
     super.initState();
     _loadChapters();
+    _searchController.addListener(_onSearchChanged);
+  }
+  
+  // Arama değiştiğinde
+  void _onSearchChanged() {
+    final query = _searchController.text.trim();
+    
+    setState(() {
+      // Arama başlarken mevcut scroll pozisyonunu kaydet
+      if (!_isSearching && query.isNotEmpty && _scrollController.hasClients) {
+        _savedScrollPosition = _scrollController.offset;
+      }
+      
+      _isSearching = query.isNotEmpty;
+      
+      if (query.isEmpty) {
+        _filteredChapters = null;
+        // Arama temizlendiğinde orijinal pozisyona dön
+        _restoreScrollPosition();
+      } else {
+        _filteredChapters = _chapters?.where((chapter) {
+          // Sayısal arama: "8" yazınca 8, 18, 28, 38, 48, 58, 68, 78, 88, 98, 108
+          if (SearchHelper.matchesNumber(query, chapter.id)) {
+            return true;
+          }
+          
+          // Sure ismiyle arama (Türkçe karakterlere duyarlı)
+          if (SearchHelper.matchesText(query, chapter.nameTurkish)) {
+            return true;
+          }
+          
+          // Arapça isimle arama (direkt)
+          if (chapter.nameArabic.contains(query)) {
+            return true;
+          }
+          
+          return false;
+        }).toList();
+        
+        // Arama sonuçları varsa scroll'u en başa getir
+        _scrollToTop();
+      }
+    });
+  }
+  
+  // Scroll'u en başa getir (animasyonlu)
+  void _scrollToTop() {
+    if (_scrollController.hasClients) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            0.0,
+            duration: Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+      });
+    }
+  }
+  
+  // Orijinal scroll pozisyonuna dön (animasyonlu)
+  void _restoreScrollPosition() {
+    if (_scrollController.hasClients && _savedScrollPosition > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _savedScrollPosition,
+            duration: Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+      });
+    }
   }
 
   Future<void> _loadChapters() async {
@@ -94,6 +172,8 @@ class _SurahListSheetState extends State<SurahListSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return DraggableScrollableSheet(
       initialChildSize: 0.9,
       minChildSize: 0.5,
@@ -101,7 +181,7 @@ class _SurahListSheetState extends State<SurahListSheet> {
       builder: (context, draggableScrollController) {
         return Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: isDark ? Color(0xFF1E1E1E) : Colors.white,
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(24),
               topRight: Radius.circular(24),
@@ -114,34 +194,115 @@ class _SurahListSheetState extends State<SurahListSheet> {
                 padding: EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [
-                      Color(0xFF1a237e),
-                      Color(0xFF283593),
-                    ],
+                    colors: isDark
+                        ? [
+                            Color(0xFF2E7D32),
+                            Color(0xFF388E3C),
+                          ]
+                        : [
+                            Color(0xFF1a237e),
+                            Color(0xFF283593),
+                          ],
                   ),
                   borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(24),
                     topRight: Radius.circular(24),
                   ),
                 ),
-                child: Row(
+                child: Column(
                   children: [
-                    Icon(Icons.menu_book, color: Colors.white, size: 28),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Sureler',
+                    Row(
+                      children: [
+                        Icon(Icons.menu_book, color: Colors.white, size: 28),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Sureler',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                    
+                    // Arama kutusu
+                    SizedBox(height: 16),
+                    AnimatedContainer(
+                      duration: Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      decoration: BoxDecoration(
+                        color: isDark 
+                            ? Color(0xFF2A2A2A) 
+                            : Colors.white.withOpacity(0.95),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 12,
+                            offset: Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: TextField(
+                        controller: _searchController,
                         style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          fontSize: 15,
+                          color: isDark ? Colors.white.withOpacity(0.95) : Colors.black87,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Sure adı veya sure numarası ile ara...',
+                          hintStyle: TextStyle(
+                            color: isDark ? Colors.white.withOpacity(0.5) : Colors.grey.shade400,
+                            fontSize: 14,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.search,
+                            color: Color(0xFF2E7D32),
+                            size: 22,
+                          ),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: Icon(
+                                    Icons.clear,
+                                    color: isDark ? Colors.white.withOpacity(0.6) : Colors.grey.shade400,
+                                    size: 20,
+                                  ),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                  },
+                                )
+                              : null,
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                         ),
                       ),
                     ),
-                    IconButton(
-                      icon: Icon(Icons.close, color: Colors.white),
-                      onPressed: () => Navigator.pop(context),
-                    ),
+                    
+                    // Sonuç sayısı
+                    if (_isSearching && _filteredChapters != null)
+                      Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Text(
+                          _filteredChapters!.isEmpty
+                              ? 'Sonuç bulunamadı'
+                              : '${_filteredChapters!.length} sure bulundu',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withOpacity(0.8),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -154,17 +315,52 @@ class _SurahListSheetState extends State<SurahListSheet> {
                           color: Color(0xFF2E7D32),
                         ),
                       )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: EdgeInsets.zero, // Boşlukları kaldır
-                        itemExtent: _itemExtent, // Sabit yükseklik
-                        itemCount: _chapters!.length,
-                        itemBuilder: (context, index) {
-                          final chapter = _chapters![index];
-                          final isCurrentChapter = chapter.id == widget.currentChapterId;
-                          return _buildSurahListItem(chapter, isCurrentChapter, index);
-                        },
-                      ),
+                    : _isSearching && _filteredChapters != null && _filteredChapters!.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.search_off,
+                                  size: 64,
+                                  color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                                ),
+                                SizedBox(height: 16),
+                                Text(
+                                  'Aradığınız sure bulunamadı',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: isDark ? Colors.white.withOpacity(0.7) : Colors.grey.shade600,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Farklı bir arama deneyin',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: isDark ? Colors.white.withOpacity(0.5) : Colors.grey.shade400,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: _scrollController,
+                            padding: EdgeInsets.zero,
+                            itemExtent: _itemExtent,
+                            itemCount: (_isSearching && _filteredChapters != null) 
+                                ? _filteredChapters!.length 
+                                : _chapters!.length,
+                            itemBuilder: (context, index) {
+                              final chapter = (_isSearching && _filteredChapters != null)
+                                  ? _filteredChapters![index]
+                                  : _chapters![index];
+                              final isCurrentChapter = chapter.id == widget.currentChapterId;
+                              final actualIndex = _chapters!.indexWhere((c) => c.id == chapter.id);
+                              return _buildSurahListItem(chapter, isCurrentChapter, actualIndex, isDark);
+                            },
+                          ),
               ),
             ],
           ),
@@ -173,7 +369,7 @@ class _SurahListSheetState extends State<SurahListSheet> {
     );
   }
 
-  Widget _buildSurahListItem(Chapter chapter, bool isCurrentChapter, int index) {
+  Widget _buildSurahListItem(Chapter chapter, bool isCurrentChapter, int index, bool isDark) {
     return InkWell(
       onTap: () async {
         // Seçilen surenin index'ini kaydet (0'dan başlayan)
@@ -197,12 +393,12 @@ class _SurahListSheetState extends State<SurahListSheet> {
                   end: Alignment.bottomRight,
                 )
               : null,
-          color: isCurrentChapter ? null : Colors.white,
+          color: isCurrentChapter ? null : (isDark ? Color(0xFF2A2A2A) : Colors.white),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isCurrentChapter 
                 ? Color(0xFF2E7D32).withOpacity(0.5)
-                : Colors.grey.shade200,
+                : (isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade200),
             width: isCurrentChapter ? 2 : 1,
           ),
           boxShadow: [
@@ -274,8 +470,8 @@ class _SurahListSheetState extends State<SurahListSheet> {
                             fontSize: isCurrentChapter ? 15 : 14,
                             fontWeight: isCurrentChapter ? FontWeight.w700 : FontWeight.bold,
                             color: isCurrentChapter
-                                ? Color(0xFF1a237e)
-                                : Colors.black87,
+                                ? Color(0xFF2E7D32)
+                                : (isDark ? Colors.white.withOpacity(0.95) : Colors.black87),
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -289,7 +485,7 @@ class _SurahListSheetState extends State<SurahListSheet> {
                           fontWeight: FontWeight.bold,
                           color: isCurrentChapter
                               ? Color(0xFF2E7D32)
-                              : Color(0xFF1a237e),
+                              : (isDark ? Colors.white.withOpacity(0.95) : Color(0xFF1a237e)),
                         ),
                       ),
                     ],
@@ -305,7 +501,7 @@ class _SurahListSheetState extends State<SurahListSheet> {
                         size: 12,
                         color: isCurrentChapter
                             ? Color(0xFF2E7D32)
-                            : Colors.black45,
+                            : (isDark ? Colors.white.withOpacity(0.5) : Colors.black45),
                       ),
                       SizedBox(width: 3),
                       Text(
@@ -315,7 +511,7 @@ class _SurahListSheetState extends State<SurahListSheet> {
                           fontWeight: isCurrentChapter ? FontWeight.w600 : FontWeight.normal,
                           color: isCurrentChapter
                               ? Color(0xFF2E7D32)
-                              : Colors.black54,
+                              : (isDark ? Colors.white.withOpacity(0.6) : Colors.black54),
                         ),
                       ),
                       SizedBox(width: 12),
@@ -324,7 +520,7 @@ class _SurahListSheetState extends State<SurahListSheet> {
                         size: 12,
                         color: isCurrentChapter
                             ? Color(0xFF2E7D32)
-                            : Colors.black45,
+                            : (isDark ? Colors.white.withOpacity(0.5) : Colors.black45),
                       ),
                       SizedBox(width: 3),
                       Text(
@@ -334,7 +530,7 @@ class _SurahListSheetState extends State<SurahListSheet> {
                           fontWeight: isCurrentChapter ? FontWeight.w600 : FontWeight.normal,
                           color: isCurrentChapter
                               ? Color(0xFF2E7D32)
-                              : Colors.black54,
+                              : (isDark ? Colors.white.withOpacity(0.6) : Colors.black54),
                         ),
                       ),
                     ],
@@ -349,7 +545,7 @@ class _SurahListSheetState extends State<SurahListSheet> {
               size: isCurrentChapter ? 24 : 14,
               color: isCurrentChapter
                   ? Color(0xFF2E7D32)
-                  : Colors.black26,
+                  : (isDark ? Colors.white.withOpacity(0.3) : Colors.black26),
             ),
           ],
         ),
@@ -360,6 +556,7 @@ class _SurahListSheetState extends State<SurahListSheet> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 }
