@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'quran_reader_screen.dart';
+import 'arabic_quran_reader_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   final Function(String themeMode)? onThemeChanged;
@@ -70,7 +71,34 @@ class HomeScreen extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Kur'an-ı Kerim Kartı
+                        // Kur'an-ı Kerim Oku Kartı (Sadece Arapça)
+                        _buildFeatureCard(
+                          context: context,
+                          title: 'Kur\'an-ı Kerim Oku',
+                          subtitle: 'Arapça Metin',
+                          icon: Icons.import_contacts,
+                          gradientColors: [
+                            Color(0xFF1565C0),
+                            Color(0xFF1976D2),
+                            Color(0xFF1E88E5),
+                          ],
+                          onTap: () {
+                            // Arapça okuma sayfasına git
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ArabicQuranReaderScreen(
+                                  onThemeChanged: onThemeChanged,
+                                ),
+                              ),
+                            );
+                          },
+                          delay: 400,
+                        ),
+                        
+                        SizedBox(height: 24),
+                        
+                        // Kur'an-ı Kerim ve Meali Kartı
                         _buildFeatureCard(
                           context: context,
                           title: 'Kur\'an-ı Kerim ve Meali',
@@ -92,7 +120,7 @@ class HomeScreen extends StatelessWidget {
                               ),
                             );
                           },
-                          delay: 400,
+                          delay: 600,
                         ),
                         
                         SizedBox(height: 24),
@@ -112,7 +140,7 @@ class HomeScreen extends StatelessWidget {
                             // Hadis sayfasına git
                             print('Hadis-i Şerif tıklandı');
                           },
-                          delay: 600,
+                          delay: 800,
                         ),
                       ],
                     ),

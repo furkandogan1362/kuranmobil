@@ -6,10 +6,12 @@ import 'settings_menu_sheet.dart';
 /// Tema ayarları bottom sheet
 class ThemeSettingsSheet extends StatefulWidget {
   final Function(String themeMode) onThemeChanged;
+  final Function()? onViewModeChanged;
 
   const ThemeSettingsSheet({
     super.key,
     required this.onThemeChanged,
+    this.onViewModeChanged,
   });
 
   @override
@@ -105,7 +107,8 @@ class _ThemeSettingsSheetState extends State<ThemeSettingsSheet> {
       backgroundColor: Colors.transparent,
       builder: (context) => SettingsMenuSheet(
         onFontSizeChanged: (_, __) {},
-        onThemeChanged: widget.onThemeChanged, // Callback'i ilet
+        onThemeChanged: widget.onThemeChanged,
+        onViewModeChanged: widget.onViewModeChanged, // Callback'i koru!
       ),
     );
   }

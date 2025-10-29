@@ -8,11 +8,13 @@ import 'settings_menu_sheet.dart';
 class FontSettingsSheet extends StatefulWidget {
   final Function(double arabicSize, double turkishSize) onFontSizeChanged;
   final Function(String themeMode)? onThemeChanged;
+  final Function()? onViewModeChanged;
 
   const FontSettingsSheet({
     super.key,
     required this.onFontSizeChanged,
     this.onThemeChanged,
+    this.onViewModeChanged,
   });
 
   @override
@@ -93,7 +95,8 @@ class _FontSettingsSheetState extends State<FontSettingsSheet> {
       backgroundColor: Colors.transparent,
       builder: (context) => SettingsMenuSheet(
         onFontSizeChanged: widget.onFontSizeChanged,
-        onThemeChanged: widget.onThemeChanged, // Callback'i ilet
+        onThemeChanged: widget.onThemeChanged,
+        onViewModeChanged: widget.onViewModeChanged, // Callback'i koru!
       ),
     );
   }

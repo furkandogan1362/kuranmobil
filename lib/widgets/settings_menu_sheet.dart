@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'font_settings_sheet.dart';
 import 'theme_settings_sheet.dart';
+import 'view_settings_sheet.dart';
 
 /// Ana ayarlar menüsü
 class SettingsMenuSheet extends StatelessWidget {
   final Function(double arabicSize, double turkishSize) onFontSizeChanged;
   final Function(String themeMode)? onThemeChanged;
+  final Function()? onViewModeChanged;
 
   const SettingsMenuSheet({
     super.key,
     required this.onFontSizeChanged,
     this.onThemeChanged,
+    this.onViewModeChanged,
   });
 
   @override
@@ -90,6 +93,24 @@ class SettingsMenuSheet extends StatelessWidget {
                 ),
                 
                 Divider(height: 1, indent: 72, endIndent: 16, color: isDark ? Colors.white.withOpacity(0.1) : null),
+                
+                // Görünüm ayarı sadece onViewModeChanged null değilse göster
+                if (onViewModeChanged != null) ...[
+                  _buildSettingItem(
+                    context: context,
+                    icon: Icons.view_compact_rounded,
+                    title: 'Görünüm',
+                    subtitle: 'Okuma görünümünü değiştirin',
+                    onTap: () {
+                      // Mevcut menüyü kapat
+                      Navigator.pop(context);
+                      // Görünüm ayarlarını aç
+                      _showViewSettings(context);
+                    },
+                  ),
+                  
+                  Divider(height: 1, indent: 72, endIndent: 16, color: isDark ? Colors.white.withOpacity(0.1) : null),
+                ],
                 
                 _buildSettingItem(
                   context: context,
@@ -194,7 +215,21 @@ class SettingsMenuSheet extends StatelessWidget {
       backgroundColor: Colors.transparent,
       builder: (context) => FontSettingsSheet(
         onFontSizeChanged: onFontSizeChanged,
-        onThemeChanged: onThemeChanged, // Callback'i ilet!
+        onThemeChanged: onThemeChanged,
+        onViewModeChanged: onViewModeChanged, // Callback'i koru!
+      ),
+    );
+  }
+  
+  void _showViewSettings(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ViewSettingsSheet(
+        onViewModeChanged: onViewModeChanged,
+        onFontSizeChanged: onFontSizeChanged,
+        onThemeChanged: onThemeChanged,
       ),
     );
   }
@@ -211,6 +246,7 @@ class SettingsMenuSheet extends StatelessWidget {
             onThemeChanged!(themeMode);
           }
         },
+        onViewModeChanged: onViewModeChanged, // Callback'i koru!
       ),
     );
   }

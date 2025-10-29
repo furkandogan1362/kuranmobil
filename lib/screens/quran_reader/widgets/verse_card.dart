@@ -140,9 +140,8 @@ class VerseCard extends StatelessWidget {
                             fontSize: arabicFontSize,
                             height: 2.2,
                             fontWeight: FontWeight.w500,
-                            color: isSajdah
-                                ? const Color(0xFF6A1B9A)
-                                : (isDark ? Colors.white.withOpacity(0.95) : Colors.black87),
+                            // Mor renk yerine normal metin rengi - secde arka plan ve badge'den anlaşılıyor
+                            color: isDark ? Colors.white.withOpacity(0.95) : Colors.black87,
                           ),
                         ),
                         const TextSpan(text: ' '),
