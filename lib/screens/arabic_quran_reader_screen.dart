@@ -872,7 +872,7 @@ class _ArabicQuranReaderScreenState extends State<ArabicQuranReaderScreen> {
                           color: isSajdah
                               ? (isDark 
                                   ? Color(0xFFFF99CC) // Karanlık mod: Açık pembe
-                                  : Color(0xFFBA68C8)) // Aydınlık mod: Açık mor (eski mordan daha açık)
+                                  : Color(0xFFbd2d2d)) // Aydınlık mod: Açık mor (eski mordan daha açık)
                               : (isDark ? Colors.white.withOpacity(0.95) : Colors.black87),
                         ),
                       ),
@@ -930,7 +930,7 @@ class _ArabicQuranReaderScreenState extends State<ArabicQuranReaderScreen> {
             color: isSajdah
                 ? (isDark 
                     ? Color(0xFFFF99CC) // Karanlık mod: Açık pembe
-                    : Color(0xFFBA68C8)) // Aydınlık mod: Açık mor
+                    : Color(0xFFbd2d2d)) // Aydınlık mod: Açık mor
                 : (isDark ? Colors.white.withOpacity(0.95) : Colors.black87),
           ),
         ),
@@ -938,8 +938,9 @@ class _ArabicQuranReaderScreenState extends State<ArabicQuranReaderScreen> {
       
       spans.add(TextSpan(text: ' '));
       
-      // Secde Badge - RTL'de başa gelmesi için metnin SONRASINA koyuyoruz
-      if (isSajdah) {
+      // Bir SONRAKİ ayetin secde ayeti olup olmadığını kontrol et
+      // Secde badge'ini ayet numarasından ÖNCE ekle
+      if (i + 1 < verses.length && verses[i + 1].isSajdahVerse()) {
         spans.add(
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
