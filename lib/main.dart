@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'screens/home_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/theme_service.dart';
 
 void main() {
@@ -63,7 +63,7 @@ class _MyAppState extends State<MyApp> {
       themeMode: _themeMode,
       theme: ThemeService.getLightTheme(),
       darkTheme: ThemeService.getDarkTheme(),
-      home: HomeScreen(onThemeChanged: _updateThemeMode),
+      home: SplashScreen(onThemeChanged: _updateThemeMode),
     );
   }
 }
