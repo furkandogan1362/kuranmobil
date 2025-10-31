@@ -100,7 +100,7 @@ class QuranJsonService {
     37: {'arabic': 'الصَّافَّات', 'turkish': 'Sâffât'},
     38: {'arabic': 'ص', 'turkish': 'Sâd'},
     39: {'arabic': 'الزُّمَر', 'turkish': 'Zümer'},
-    40: {'arabic': 'غَافِر', 'turkish': 'Mü\'min'},
+    40: {'arabic': 'المؤمن', 'turkish': 'Mü\'min'},
     41: {'arabic': 'فُصِّلَتْ', 'turkish': 'Fussılet'},
     42: {'arabic': 'الشُّورَىٰ', 'turkish': 'Şûrâ'},
     43: {'arabic': 'الزُّخْرُف', 'turkish': 'Zuhruf'},

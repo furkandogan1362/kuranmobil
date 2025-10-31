@@ -20,6 +20,7 @@ class AudioService extends ChangeNotifier {
   List<int> _highlightedAyahs = [];
   double _playbackSpeed = 1.0;
   bool _isCancelled = false; // İşlem iptal edildi mi?
+  int _currentSessionId = 0; // Aktif oynatma session ID'si
   
   // Sayfa değiştirme callback'i
   Function(int surahId, int ayahNumber)? onPageChangeNeeded;
@@ -121,10 +122,17 @@ class AudioService extends ChangeNotifier {
   }
   
   /// Sure ve ayet seslendirmeyi başlat
-  Future<void> playAyah(int surah, int ayah, {int totalAyahs = 0, Map<int, dynamic>? chapters}) async {
+  Future<void> playAyah(int surah, int ayah, {
+    int totalAyahs = 0, 
+    Map<int, dynamic>? chapters,
+    bool skipSurahName = false, // Yeni parametre: True ise 0. ayeti atla
+  }) async {
     try {
       // Önceki işlemi iptal et
       _isCancelled = true;
+      _currentSessionId++; // Yeni session başlat
+      final sessionId = _currentSessionId; // Bu session'ın ID'sini sakla
+      
       await _audioPlayer.stop();
       await Future.delayed(Duration(milliseconds: 100)); // Önceki işlemin durmasını bekle
       
@@ -151,18 +159,50 @@ class AudioService extends ChangeNotifier {
       _currentAyah = ayah;
       _totalAyahs = totalAyahs;
       
-      // Eğer ilk ayet ise önce sure adını çal (x_0)
-      if (ayah == 1) {
+      // Eğer ilk ayet ise VE skipSurahName false ise önce sure adını çal (x_0)
+      if (ayah == 1 && !skipSurahName) {
+        // 0. ayeti çal (sure adı + besmele)
         final surahNamePath = await _getAudioFilePath(surah, 0);
-        if (surahNamePath != null && !_isCancelled) {
+        if (surahNamePath != null && !_isCancelled && sessionId == _currentSessionId) {
+          // 0. ayet çalınıyor olarak işaretle
+          _currentAyah = 0;
+          _highlightedAyahs = [0];
+          _isPlaying = true;
+          _isLoading = false;
+          notifyListeners();
+          
+          print('🎵 Çalınıyor: $surah:0 (Sure adı + Besmele)');
           await _audioPlayer.play(DeviceFileSource(surahNamePath));
           await _audioPlayer.setPlaybackRate(_playbackSpeed);
-          await _audioPlayer.onPlayerComplete.first; // Bitene kadar bekle
+          
+          // Session kontrolü
+          if (sessionId != _currentSessionId || _isCancelled) {
+            print('⏹️ Sure adı çalarken session değişti');
+            return;
+          }
+          
+          // Sure adı bitene kadar bekle
+          await _audioPlayer.onPlayerComplete.first;
+          
+          // Session kontrolü tekrar
+          if (sessionId != _currentSessionId || _isCancelled) {
+            print('⏹️ Sure adı bitti ama session değişti');
+            return;
+          }
+          
+          print('✅ Sure adı tamamlandı, ayetlere geçiliyor');
         }
       }
       
-      // Şimdi ayeti çal
-      await _playAyahRecursive(surah, ayah, totalAyahs);
+      // Loading'i kapat
+      _isLoading = false;
+      notifyListeners();
+      
+      // Session hala aktif mi kontrol et
+      if (sessionId == _currentSessionId && !_isCancelled) {
+        // Şimdi ayeti çal (1. ayetten başla)
+        await _playAyahRecursive(surah, ayah, totalAyahs, sessionId);
+      }
       
     } catch (e) {
       print('❌ Ses çalma hatası: $e');
@@ -173,7 +213,13 @@ class AudioService extends ChangeNotifier {
   }
   
   /// Ayetleri sırayla çal (sessiz olanları biriktir)
-  Future<void> _playAyahRecursive(int surah, int ayah, int totalAyahs) async {
+  Future<void> _playAyahRecursive(int surah, int ayah, int totalAyahs, int sessionId) async {
+    // Session kontrolü - bu session hala aktif mi?
+    if (sessionId != _currentSessionId) {
+      print('⏹️ Eski session durduruldu (session $sessionId != $_currentSessionId)');
+      return;
+    }
+    
     // İptal kontrolü
     if (_isCancelled) {
       print('⏹️ Oynatma iptal edildi');
@@ -188,15 +234,15 @@ class AudioService extends ChangeNotifier {
     
     final filePath = await _getAudioFilePath(surah, ayah);
     
-    // İptal kontrolü tekrar (download sırasında iptal edilmiş olabilir)
-    if (_isCancelled) {
-      print('⏹️ Oynatma iptal edildi');
+    // Session ve iptal kontrolü tekrar (download sırasında değişmiş olabilir)
+    if (sessionId != _currentSessionId || _isCancelled) {
+      print('⏹️ Oynatma iptal edildi veya session değişti');
       return;
     }
     
     if (filePath == null) {
       // Dosya indirilemedi, sonraki ayete geç
-      await _playAyahRecursive(surah, ayah + 1, totalAyahs);
+      await _playAyahRecursive(surah, ayah + 1, totalAyahs, sessionId);
       return;
     }
     
@@ -206,7 +252,7 @@ class AudioService extends ChangeNotifier {
     if (isSilent) {
       print('⏭️ Sessiz ayet atlandı: $surah:$ayah');
       // Sessiz ayeti atla, sonraki ayete geç
-      await _playAyahRecursive(surah, ayah + 1, totalAyahs);
+      await _playAyahRecursive(surah, ayah + 1, totalAyahs, sessionId);
     } else {
       // Normal ayet - sadece bu ayeti vurgula
       _currentAyah = ayah;
@@ -222,7 +268,7 @@ class AudioService extends ChangeNotifier {
       notifyListeners();
       
       // Sayfa değişikliği gerekebilir - callback çağır (ayet çalmaya başladıktan SONRA)
-      if (onPageChangeNeeded != null && !_isCancelled) {
+      if (onPageChangeNeeded != null && !_isCancelled && sessionId == _currentSessionId) {
         onPageChangeNeeded!(surah, ayah);
       }
       
@@ -233,9 +279,9 @@ class AudioService extends ChangeNotifier {
       // Ses bitene kadar bekle
       await _audioPlayer.onPlayerComplete.first;
       
-      // İptal kontrolü (ses çalarken iptal edilmiş olabilir)
-      if (_isCancelled) {
-        print('⏹️ Oynatma iptal edildi');
+      // Session kontrolü (ses çalarken session değişmiş olabilir)
+      if (sessionId != _currentSessionId || _isCancelled) {
+        print('⏹️ Oynatma iptal edildi veya session değişti');
         return;
       }
       
@@ -245,13 +291,13 @@ class AudioService extends ChangeNotifier {
       // Sonraki ayete geç
       if (ayah + 1 <= totalAyahs) {
         // Aynı sure içinde devam et
-        await _playAyahRecursive(surah, ayah + 1, totalAyahs);
+        await _playAyahRecursive(surah, ayah + 1, totalAyahs, sessionId);
       } else {
         // Sure bitti, bir sonraki sureye geç
         print('✅ Sure $surah tamamlandı');
         
         // Sonraki sure var mı kontrol et
-        if (surah < 114 && _chaptersMap != null && !_isCancelled) {
+        if (surah < 114 && _chaptersMap != null && !_isCancelled && sessionId == _currentSessionId) {
           final nextSurah = surah + 1;
           final nextChapter = _chaptersMap![nextSurah];
           
@@ -266,7 +312,7 @@ class AudioService extends ChangeNotifier {
             _stopPlaying();
           }
         } else {
-          // Son sure de bitti veya chapters map yok
+          // Son sure de bitti veya chapters map yok veya session değişti
           if (surah >= 114) {
             print('🎊 Kuran-ı Kerim tamamlandı!');
           }
@@ -343,23 +389,62 @@ class AudioService extends ChangeNotifier {
   
   /// Önceki ayete geç
   Future<void> previousAyah() async {
-    if (_currentAyah != null && _currentSurah != null && _currentAyah! > 1 && _totalAyahs != null) {
-      final surah = _currentSurah!;
-      final ayah = _currentAyah!;
-      final total = _totalAyahs!;
+    if (_currentAyah == null || _currentSurah == null || _totalAyahs == null) return;
+    
+    final surah = _currentSurah!;
+    final ayah = _currentAyah!;
+    final total = _totalAyahs!;
+    
+    if (ayah > 1) {
+      // Aynı sure içinde önceki ayete git (örn: 2 → 1, 3 → 2)
       await stopAudio();
-      await playAyah(surah, ayah - 1, totalAyahs: total);
+      await playAyah(surah, ayah - 1, totalAyahs: total, skipSurahName: true); // ✅ skipSurahName=true
+    } else if (ayah == 1) {
+      // 1. ayetteyiz, önce 0. ayete (sure adı) git
+      await stopAudio();
+      await playAyah(surah, 1, totalAyahs: total); // 0. ayeti çal (skipSurahName=false)
+    } else if (ayah == 0 && surah > 1) {
+      // 0. ayetteyiz (sure adı), şimdi önceki surenin son ayetine git
+      final previousSurah = surah - 1;
+      // Önceki surenin toplam ayet sayısını bul
+      if (_chaptersMap != null && _chaptersMap!.containsKey(previousSurah)) {
+        final previousChapter = _chaptersMap![previousSurah];
+        final previousTotal = previousChapter?.versesCount ?? 0;
+        if (previousTotal > 0) {
+          await stopAudio();
+          // Önceki surenin SON ayetinden başla (0. ayeti atla)
+          await playAyah(previousSurah, previousTotal, totalAyahs: previousTotal, chapters: _chaptersMap, skipSurahName: true);
+        }
+      }
     }
   }
   
   /// Sonraki ayete geç
   Future<void> nextAyah() async {
-    if (_currentAyah != null && _currentSurah != null && _totalAyahs != null && _currentAyah! < _totalAyahs!) {
-      final surah = _currentSurah!;
-      final ayah = _currentAyah!;
-      final total = _totalAyahs!;
+    if (_currentAyah == null || _currentSurah == null || _totalAyahs == null) return;
+    
+    final surah = _currentSurah!;
+    final ayah = _currentAyah!;
+    final total = _totalAyahs!;
+    
+    if (ayah == 0) {
+      // 0. ayetteyiz (sure adı), direkt 1. ayete git
       await stopAudio();
-      await playAyah(surah, ayah + 1, totalAyahs: total);
+      await playAyah(surah, 1, totalAyahs: total, skipSurahName: true); // ✅ 0. ayeti tekrar çalma
+    } else if (ayah < total) {
+      // Aynı sure içinde sonraki ayete git
+      await stopAudio();
+      await playAyah(surah, ayah + 1, totalAyahs: total, skipSurahName: true); // ✅ skipSurahName=true
+    } else if (_chaptersMap != null && _chaptersMap!.containsKey(surah + 1)) {
+      // Son ayetteyiz, sonraki sureye git
+      final nextSurah = surah + 1;
+      final nextChapter = _chaptersMap![nextSurah];
+      final nextTotal = nextChapter?.versesCount ?? 0;
+      if (nextTotal > 0) {
+        await stopAudio();
+        // Sonraki surenin İLK ayetinden başla (0. ayeti ÇALACAK - skipSurahName=false)
+        await playAyah(nextSurah, 1, totalAyahs: nextTotal, chapters: _chaptersMap); // ✅ skipSurahName=false (yeni sure)
+      }
     }
   }
   

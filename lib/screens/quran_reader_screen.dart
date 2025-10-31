@@ -57,6 +57,10 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
   double _arabicFontSize = FontSettingsService.defaultArabicFontSize;
   double _turkishFontSize = FontSettingsService.defaultTurkishFontSize;
 
+  // Oynatıcı durumu
+  bool _isPlayerExpanded = false; // Oynatıcı açık mı?
+  bool _isPlayerMinimized = false; // Oynatıcı minimize mi?
+
   // Scroll pozisyonu kaydetme için debounce timer
   Timer? _scrollSaveTimer;
   static const Duration _scrollSaveDelay = Duration(milliseconds: 500);
@@ -210,6 +214,12 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
       // Sure listesi vurgulamasını da güncelle
       _lastSelectedChapterId = _pageChapters[pageNumber]?.id;
     });
+    
+    // AudioService'e yeni sayfanın suresini bildir
+    if (_currentVisibleChapterId != null) {
+      final audioService = Provider.of<AudioService>(context, listen: false);
+      audioService.setVisibleSurah(_currentVisibleChapterId!);
+    }
 
     // Son okunan sayfayı kaydet
     QuranJsonService.saveLastReadPage(pageNumber);
@@ -478,9 +488,11 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
         _lastSelectedChapterId = newVisibleChapterId;
       });
       
-      // AudioService'e görünen sureyi bildir
+      // AudioService'e görünen sureyi bildir - SADECE sesli meal çalmıyorsa
       final audioService = Provider.of<AudioService>(context, listen: false);
-      audioService.setVisibleSurah(newVisibleChapterId);
+      if (!audioService.isPlaying) {
+        audioService.setVisibleSurah(newVisibleChapterId);
+      }
     }
   }
   
@@ -539,6 +551,27 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
   
   // Çalan ayete otomatik scroll
   void _scrollToPlayingVerse(int pageNumber, int surahId, int verseNumber) {
+    // 0. ayet (sure adı) için özel kontrol
+    if (verseNumber == 0) {
+      // SurahHeader'ın key'ini kullan
+      final surahHeaderKey = _pageKeys[pageNumber]?[surahId];
+      
+      if (surahHeaderKey?.currentContext != null) {
+        try {
+          Scrollable.ensureVisible(
+            surahHeaderKey!.currentContext!,
+            duration: Duration(milliseconds: 400),
+            curve: Curves.easeInOut,
+            alignment: 0.15, // Ekranın %15'inde göster (header'a yakın)
+          );
+        } catch (e) {
+          print('⚠️ SurahHeader scroll hatası: $e');
+        }
+      }
+      return;
+    }
+    
+    // Normal ayetler için
     final verseKeyId = '${surahId}_$verseNumber';
     final verseKey = _verseKeys[pageNumber]?[verseKeyId];
     
@@ -554,6 +587,25 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
         print('⚠️ Scroll hatası: $e');
       }
     }
+  }
+
+  // Sesli meal oynatıcıyı aç/kapat
+  void _startAudioPlayer() {
+    setState(() {
+      if (_isPlayerMinimized) {
+        // Minimize edilmişse tam aç
+        _isPlayerMinimized = false;
+        _isPlayerExpanded = true;
+      } else if (_isPlayerExpanded) {
+        // Açıksa minimize et
+        _isPlayerExpanded = false;
+        _isPlayerMinimized = true;
+      } else {
+        // Kapalıysa aç
+        _isPlayerExpanded = true;
+        _isPlayerMinimized = false;
+      }
+    });
   }
 
   @override
@@ -639,88 +691,114 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
     }
 
     return Scaffold(
-      body: Stack(
+      body: Column(
         children: [
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: isDark
-                    ? [Color(0xFF242324), Color(0xFF242324)]
-                    : [Color(0xFFFAF8F3), Color(0xFFF5F1E8)],
-              ),
-            ),
-            child: SafeArea(
-              child: Column(
-                children: [
-                  // Sabit başlık ve pagination
-                  _buildFixedHeader(),
-
-                  // Ana içerik - Sayfalar arası kaydırma
-                  Expanded(
-                    child: PageView.builder(
-                      controller: _pageController,
-                      onPageChanged: _onPageChanged,
-                      itemCount: totalPages,
-                      reverse: true, // Sağdan sola kaydırma için
-                      allowImplicitScrolling:
-                          true, // Komşu sayfaları önceden hazırlayıp kaydırmayı yumuşat
-                      itemBuilder: (context, index) {
-                        final pageNumber = index + 1;
-                        final verses = _pageVerses[pageNumber];
-                        final chapter = _pageChapters[pageNumber];
-
-                        if (verses == null || chapter == null) {
-                          return Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                CircularProgressIndicator(
-                                  color: Color(0xFF2E7D32),
-                                ),
-                                SizedBox(height: 16),
-                                Text(
-                                  'Sayfa $pageNumber yükleniyor...',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.black54,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-
-                        return _buildQuranPage(pageNumber, chapter, verses);
-                      },
+          // Ana içerik
+          Expanded(
+            child: Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: isDark
+                          ? [Color(0xFF242324), Color(0xFF242324)]
+                          : [Color(0xFFFAF8F3), Color(0xFFF5F1E8)],
                     ),
                   ),
-                ],
-              ),
+                  child: SafeArea(
+                    bottom: false, // Bottom'u false yapıyoruz çünkü aşağıda widget'lar var
+                    child: Column(
+                      children: [
+                        // Sabit başlık ve pagination
+                        _buildFixedHeader(),
+
+                        // Ana içerik - Sayfalar arası kaydırma
+                        Expanded(
+                          child: PageView.builder(
+                            controller: _pageController,
+                            onPageChanged: _onPageChanged,
+                            itemCount: totalPages,
+                            reverse: true, // Sağdan sola kaydırma için
+                            allowImplicitScrolling:
+                                true, // Komşu sayfaları önceden hazırlayıp kaydırmayı yumuşat
+                            itemBuilder: (context, index) {
+                              final pageNumber = index + 1;
+                              final verses = _pageVerses[pageNumber];
+                              final chapter = _pageChapters[pageNumber];
+
+                              if (verses == null || chapter == null) {
+                                return Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      CircularProgressIndicator(
+                                        color: Color(0xFF2E7D32),
+                                      ),
+                                      SizedBox(height: 16),
+                                      Text(
+                                        'Sayfa $pageNumber yükleniyor...',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          color: Colors.black54,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+
+                              return _buildQuranPage(pageNumber, chapter, verses);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Uzak sayfaya geçişte yumuşak katman (fade)
+                if (_isJumpingFar)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: AnimatedOpacity(
+                        opacity: 1,
+                        duration: const Duration(milliseconds: 150),
+                        child: Container(color: Colors.white.withOpacity(0.6)),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
-          // Uzak sayfaya geçişte yumuşak katman (fade)
-          if (_isJumpingFar)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: AnimatedOpacity(
-                  opacity: 1,
-                  duration: const Duration(milliseconds: 150),
-                  child: Container(color: Colors.white.withOpacity(0.6)),
-                ),
-              ),
-            ),
+          
+          // Audio player - Bottom bar'ın hemen üstünde
+          AudioPlayerWidget(
+            chapter: _pageChapters[_currentPage],
+            currentPage: _currentPage,
+            chapters: _chapterCache,
+            currentPageVerses: _pageVerses[_currentPage],
+            isExpanded: _isPlayerExpanded,
+            isMinimized: _isPlayerMinimized,
+            onExpandedChanged: (value) => setState(() => _isPlayerExpanded = value),
+            onMinimizedChanged: (value) => setState(() => _isPlayerMinimized = value),
+            onChapterSelected: (chapter) {
+              // Sure seçildiğinde o surenin sayfasına git
+              final targetPage = chapter.pageStart;
+              if (targetPage != _currentPage) {
+                _pageController.animateToPage(
+                  targetPage - 1, // PageView 0-indexed
+                  duration: Duration(milliseconds: 400),
+                  curve: Curves.easeInOut,
+                );
+              }
+            },
+          ),
+          
+          // Bottom navigation bar
+          _buildBottomNavigationBar(),
         ],
       ),
-      floatingActionButton: AudioPlayerWidget(
-        chapter: _pageChapters[_currentPage],
-        currentPage: _currentPage,
-        chapters: _chapterCache, // Tüm sure bilgilerini gönder
-        currentPageVerses: _pageVerses[_currentPage], // Mevcut sayfanın ayetlerini gönder
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      bottomNavigationBar: _buildBottomNavigationBar(),
     );
   }
 
@@ -747,45 +825,62 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
   Widget _buildBottomNavigationBar() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: isDark
-              ? [Color(0xFF302F30), Color(0xFF302F30)]
-              : [Colors.white, Colors.grey.shade50],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.12),
-            blurRadius: 16,
-            offset: Offset(0, -4),
-            spreadRadius: 0,
-          ),
-        ],
-        border: Border(
-          top: BorderSide(
-            color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade200,
-            width: 1,
-          ),
-        ),
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildNavBarItem(
-                icon: Icons.settings_rounded,
-                label: 'Ayarlar',
-                onTap: _showFontSettings,
+    return Consumer<AudioService>(
+      builder: (context, audioService, child) {
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: isDark
+                  ? [Color(0xFF302F30), Color(0xFF302F30)]
+                  : [Colors.white, Colors.grey.shade50],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.3 : 0.12),
+                blurRadius: 16,
+                offset: Offset(0, -4),
+                spreadRadius: 0,
               ),
             ],
+            border: Border(
+              top: BorderSide(
+                color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade200,
+                width: 1,
+              ),
+            ),
           ),
-        ),
-      ),
+          child: SafeArea(
+            top: false, // Üstten SafeArea istemiyoruz
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  // Sesli Meal butonu
+                  Expanded(
+                    child: _buildNavBarItem(
+                      icon: Icons.volume_up_rounded,
+                      label: 'Sesli Meal',
+                      onTap: _startAudioPlayer,
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  // Ayarlar butonu
+                  Expanded(
+                    child: _buildNavBarItem(
+                      icon: Icons.settings_rounded,
+                      label: 'Ayarlar',
+                      onTap: _showFontSettings,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
   
@@ -904,11 +999,26 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
           final chapterInfo = _chapterCache[verse.chapterId];
           final surahName = chapterInfo?.nameTurkish ?? 'Yükleniyor...';
           pageContent.add(
-            SurahHeader(
-              key: key,
-              chapterId: verse.chapterId,
-              surahName: surahName,
-              showBesmele: true,
+            Consumer<AudioService>(
+              builder: (context, audioService, child) {
+                // 0. ayet (sure adı + besmele) çalınıyor mu kontrol et
+                final isPlayingZeroVerse = audioService.isAyahPlaying(verse.chapterId, 0);
+                
+                // 0. ayet çalınıyorsa scroll yap
+                if (isPlayingZeroVerse && pageNumber == _currentPage) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _scrollToPlayingVerse(pageNumber, verse.chapterId, 0);
+                  });
+                }
+                
+                return SurahHeader(
+                  key: key,
+                  chapterId: verse.chapterId,
+                  surahName: surahName,
+                  showBesmele: true,
+                  isPlaying: isPlayingZeroVerse,
+                );
+              },
             ),
           );
         }
@@ -940,6 +1050,29 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
               arabicFontSize: _arabicFontSize,
               turkishFontSize: _turkishFontSize,
               isPlaying: isPlaying,
+              onDoubleTap: () async {
+                // Çift tıklama ile ayet seslendirilsin
+                final audioService = Provider.of<AudioService>(context, listen: false);
+                
+                // Mevcut sayfadaki tüm chapter'ları al
+                final chapters = <int, Chapter>{};
+                if (_pageVerses[pageNumber] != null) {
+                  for (final v in _pageVerses[pageNumber]!) {
+                    if (!chapters.containsKey(v.chapterId) && _chapterCache.containsKey(v.chapterId)) {
+                      chapters[v.chapterId] = _chapterCache[v.chapterId]!;
+                    }
+                  }
+                }
+                
+                // Ayeti çal
+                await audioService.playAyah(
+                  verse.chapterId,
+                  verse.verseNumber,
+                  totalAyahs: chapters[verse.chapterId]?.versesCount ?? 0,
+                  chapters: chapters,
+                  skipSurahName: verse.verseNumber != 1, // 1. ayet değilse sure adını atla
+                );
+              },
             );
           },
         ),
