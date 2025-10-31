@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'screens/splash_screen.dart';
 import 'services/theme_service.dart';
+import 'services/audio_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -56,14 +58,17 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: _navigatorKey,
-      title: 'Kur\'an-ı Kerim',
-      debugShowCheckedModeBanner: false,
-      themeMode: _themeMode,
-      theme: ThemeService.getLightTheme(),
-      darkTheme: ThemeService.getDarkTheme(),
-      home: SplashScreen(onThemeChanged: _updateThemeMode),
+    return ChangeNotifierProvider(
+      create: (_) => AudioService(),
+      child: MaterialApp(
+        navigatorKey: _navigatorKey,
+        title: 'Kur\'an-ı Kerim',
+        debugShowCheckedModeBanner: false,
+        themeMode: _themeMode,
+        theme: ThemeService.getLightTheme(),
+        darkTheme: ThemeService.getDarkTheme(),
+        home: SplashScreen(onThemeChanged: _updateThemeMode),
+      ),
     );
   }
 }

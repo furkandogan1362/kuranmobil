@@ -46,6 +46,16 @@ dependencies:
   
   # Sayfa cache için
   shared_preferences: ^2.2.2
+  
+  # Ses çalma için
+  audioplayers: ^6.0.0
+  
+  # HTTP istekleri için
+  http: ^1.1.0
+  
+  # Dosya indirme ve izinler için
+  path_provider: ^2.1.1
+  permission_handler: ^11.0.1
 
 dev_dependencies:
   flutter_test:

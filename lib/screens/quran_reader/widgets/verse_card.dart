@@ -7,46 +7,73 @@ class VerseCard extends StatelessWidget {
     required this.verse,
     this.arabicFontSize = 32.0,
     this.turkishFontSize = 16.0,
+    this.isPlaying = false,
   });
 
   final Verse verse;
   final double arabicFontSize;
   final double turkishFontSize;
+  final bool isPlaying;
 
   @override
   Widget build(BuildContext context) {
     final isSajdah = verse.isSajdahVerse();
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    // Sesli meal çalınıyorsa özel arka plan
+    final isHighlighted = isPlaying;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
-      child: Container(
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          gradient: isSajdah
+          gradient: isHighlighted
               ? LinearGradient(
                   colors: [
-                    const Color(0xFF8E24AA).withOpacity(isDark ? 0.15 : 0.08),
-                    const Color(0xFF6A1B9A).withOpacity(isDark ? 0.15 : 0.08),
+                    const Color(0xFF10B981).withOpacity(isDark ? 0.25 : 0.15),
+                    const Color(0xFF059669).withOpacity(isDark ? 0.25 : 0.15),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 )
-              : null,
-          color: isSajdah ? null : (isDark ? Color(0xFF302F30) : Colors.white),
+              : isSajdah
+                  ? LinearGradient(
+                      colors: [
+                        const Color(0xFF8E24AA).withOpacity(isDark ? 0.15 : 0.08),
+                        const Color(0xFF6A1B9A).withOpacity(isDark ? 0.15 : 0.08),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : null,
+          color: isHighlighted
+              ? null
+              : isSajdah
+                  ? null
+                  : (isDark ? Color(0xFF302F30) : Colors.white),
           borderRadius: BorderRadius.circular(16),
-          border: isSajdah
+          border: isHighlighted
               ? Border.all(
-                  color: const Color(0xFF8E24AA).withOpacity(0.3),
+                  color: const Color(0xFF10B981),
                   width: 2,
                 )
-              : null,
+              : isSajdah
+                  ? Border.all(
+                      color: const Color(0xFF8E24AA).withOpacity(0.3),
+                      width: 2,
+                    )
+                  : null,
           boxShadow: [
             BoxShadow(
-              color: isSajdah
-                  ? const Color(0xFF8E24AA).withOpacity(0.15)
-                  : Colors.black.withOpacity(isDark ? 0.3 : 0.05),
-              blurRadius: isSajdah ? 15 : 10,
+              color: isHighlighted
+                  ? const Color(0xFF10B981).withOpacity(0.3)
+                  : isSajdah
+                      ? const Color(0xFF8E24AA).withOpacity(0.15)
+                      : Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+              blurRadius: isHighlighted ? 20 : (isSajdah ? 15 : 10),
               offset: const Offset(0, 4),
             ),
           ],
@@ -60,22 +87,30 @@ class VerseCard extends StatelessWidget {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: isSajdah
-                        ? const Color(0xFF8E24AA).withOpacity(0.15)
-                        : (isDark ? Color(0xFF4CAF50).withOpacity(0.2) : const Color(0xFF2E7D32).withOpacity(0.1)),
+                    color: isHighlighted
+                        ? const Color(0xFF10B981).withOpacity(0.2)
+                        : isSajdah
+                            ? const Color(0xFF8E24AA).withOpacity(0.15)
+                            : (isDark ? Color(0xFF4CAF50).withOpacity(0.2) : const Color(0xFF2E7D32).withOpacity(0.1)),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Center(
-                    child: Text(
-                      '${verse.verseNumber}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: isSajdah
-                            ? const Color(0xFF8E24AA)
-                            : (isDark ? Color(0xFF4CAF50) : const Color(0xFF2E7D32)),
-                      ),
-                    ),
+                    child: isHighlighted
+                        ? Icon(
+                            Icons.volume_up_rounded,
+                            size: 18,
+                            color: const Color(0xFF10B981),
+                          )
+                        : Text(
+                            '${verse.verseNumber}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: isSajdah
+                                  ? const Color(0xFF8E24AA)
+                                  : (isDark ? Color(0xFF4CAF50) : const Color(0xFF2E7D32)),
+                            ),
+                          ),
                   ),
                 ),
                 if (isSajdah) ...[

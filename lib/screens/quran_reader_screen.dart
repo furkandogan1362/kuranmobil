@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
 import '../models/chapter.dart';
 import '../models/verse.dart';
 import '../services/quran_json_service.dart';
 import '../services/font_settings_service.dart';
+import '../services/audio_service.dart';
 import '../widgets/surah_list_sheet.dart';
 import '../widgets/settings_menu_sheet.dart';
+import '../widgets/audio_player_widget.dart';
 import 'quran_reader/widgets/quran_reader_header.dart';
 import 'quran_reader/widgets/surah_header.dart';
 import 'quran_reader/widgets/verse_card.dart';
@@ -37,7 +40,9 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
   Map<int, Chapter> _pageChapters = {}; // Sayfa numarası -> Sure bilgisi
   Map<int, Chapter> _chapterCache = {}; // Sure ID -> Sure bilgisi (yeni)
   Map<int, Map<int, GlobalKey>> _pageKeys =
-      {}; // Sayfa numarası -> (Sure ID -> GlobalKey)
+      {}; // Sayfa numarası -> (Sure ID -> GlobalKey) - Sure başlıkları için
+  Map<int, Map<String, GlobalKey>> _verseKeys = 
+      {}; // Sayfa numarası -> ("surah_ayah" -> GlobalKey) - Ayetler için
   Map<int, ScrollController> _pageScrollControllers =
       {}; // Her sayfa için ayrı ScrollController
   int _currentPage = 1; // 1'den başlıyor
@@ -61,6 +66,12 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
     super.initState();
     _loadLastPageAndInit();
     _loadFontSettings();
+    
+    // AudioService sayfa değiştirme callback'ini ayarla
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final audioService = Provider.of<AudioService>(context, listen: false);
+      audioService.onPageChangeNeeded = _handlePageChangeRequest;
+    });
   }
   
   Future<void> _loadFontSettings() async {
@@ -466,6 +477,82 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
         // Sure listesinde vurgulanan sureyi de güncelle
         _lastSelectedChapterId = newVisibleChapterId;
       });
+      
+      // AudioService'e görünen sureyi bildir
+      final audioService = Provider.of<AudioService>(context, listen: false);
+      audioService.setVisibleSurah(newVisibleChapterId);
+    }
+  }
+  
+  // Çalan ayetin sayfa bilgisini kontrol et ve gerekirse sayfa değiştir
+  void _handlePageChangeRequest(int surahId, int ayahNumber) {
+    // Mevcut sayfadaki ayetler arasında bu ayet var mı kontrol et
+    final currentPageVerses = _pageVerses[_currentPage];
+    if (currentPageVerses == null) return;
+    
+    // Bu ayetin mevcut sayfada olup olmadığını kontrol et
+    final verseInCurrentPage = currentPageVerses.any(
+      (v) => v.chapterId == surahId && v.verseNumber == ayahNumber,
+    );
+    
+    // Eğer ayet bu sayfada varsa, sayfa değişimine gerek yok
+    if (verseInCurrentPage) return;
+    
+    // Ayet bu sayfada değil - tüm yüklü sayfalarda ara
+    int? targetPage;
+    for (var pageEntry in _pageVerses.entries) {
+      final verses = pageEntry.value;
+      final verse = verses.firstWhere(
+        (v) => v.chapterId == surahId && v.verseNumber == ayahNumber,
+        orElse: () => Verse(
+          id: 0,
+          verseNumber: 0,
+          chapterId: 0,
+          verseKey: '',
+          textUthmani: '',
+          translationTurkish: '',
+          pageNumber: 0,
+          juzNumber: 0,
+        ),
+      );
+      
+      if (verse.pageNumber > 0) {
+        targetPage = verse.pageNumber;
+        break;
+      }
+    }
+    
+    // Hedef sayfa bulunduysa git
+    if (targetPage != null && targetPage != _currentPage) {
+      print('📄 Sayfa değiştiriliyor: $_currentPage -> $targetPage (Sure: $surahId, Ayet: $ayahNumber)');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_pageController.hasClients) {
+          _pageController.animateToPage(
+            targetPage! - 1, // PageController 0-indexed
+            duration: Duration(milliseconds: 500),
+            curve: Curves.easeInOut,
+          );
+        }
+      });
+    }
+  }
+  
+  // Çalan ayete otomatik scroll
+  void _scrollToPlayingVerse(int pageNumber, int surahId, int verseNumber) {
+    final verseKeyId = '${surahId}_$verseNumber';
+    final verseKey = _verseKeys[pageNumber]?[verseKeyId];
+    
+    if (verseKey?.currentContext != null) {
+      try {
+        Scrollable.ensureVisible(
+          verseKey!.currentContext!,
+          duration: Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+          alignment: 0.2, // Ekranın %20'sinde göster (header'dan sonra)
+        );
+      } catch (e) {
+        print('⚠️ Scroll hatası: $e');
+      }
     }
   }
 
@@ -626,6 +713,13 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
             ),
         ],
       ),
+      floatingActionButton: AudioPlayerWidget(
+        chapter: _pageChapters[_currentPage],
+        currentPage: _currentPage,
+        chapters: _chapterCache, // Tüm sure bilgilerini gönder
+        currentPageVerses: _pageVerses[_currentPage], // Mevcut sayfanın ayetlerini gönder
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       bottomNavigationBar: _buildBottomNavigationBar(),
     );
   }
@@ -775,6 +869,11 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
     if (!_pageKeys.containsKey(pageNumber)) {
       _pageKeys[pageNumber] = {};
     }
+    
+    // Bu sayfa için ayet key'lerini sakla
+    if (!_verseKeys.containsKey(pageNumber)) {
+      _verseKeys[pageNumber] = {};
+    }
 
     // Bu sayfa için ScrollController oluştur (henüz yoksa)
     if (!_pageScrollControllers.containsKey(pageNumber)) {
@@ -816,12 +915,33 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
         lastChapterId = verse.chapterId;
       }
 
+      // Ayet için GlobalKey oluştur
+      final verseKey = GlobalKey();
+      final verseKeyId = '${verse.chapterId}_${verse.verseNumber}';
+      _verseKeys[pageNumber]![verseKeyId] = verseKey;
+
       // Ayeti ekle
       pageContent.add(
-        VerseCard(
-          verse: verse,
-          arabicFontSize: _arabicFontSize,
-          turkishFontSize: _turkishFontSize,
+        Consumer<AudioService>(
+          builder: (context, audioService, child) {
+            // Bu ayet çalınıyor mu kontrol et - hem sure hem ayet numarasını kontrol et
+            final isPlaying = audioService.isAyahPlaying(verse.chapterId, verse.verseNumber);
+            
+            // Çalan ayete otomatik scroll
+            if (isPlaying && pageNumber == _currentPage) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _scrollToPlayingVerse(pageNumber, verse.chapterId, verse.verseNumber);
+              });
+            }
+            
+            return VerseCard(
+              key: verseKey,
+              verse: verse,
+              arabicFontSize: _arabicFontSize,
+              turkishFontSize: _turkishFontSize,
+              isPlaying: isPlaying,
+            );
+          },
         ),
       );
     }
