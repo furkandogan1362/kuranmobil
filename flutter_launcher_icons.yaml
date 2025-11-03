@@ -1,0 +1,28 @@
+# Uygulama İkonu Yapılandırması - Android Özelleştirilmiş
+# Bu dosya, uygulamanın Android ikonlarını yönetir.
+# Değişiklik yaptıktan sonra şu komutu çalıştırın:
+# dart run flutter_launcher_icons
+
+flutter_launcher_icons:
+  # Sadece Android için (uygulama sadece Android'de çalışacak)
+  android: true
+  ios: false
+  
+  # Ana ikon dosyası (minimum 1024x1024 px önerilir)
+  image_path: "assets/images/islam_rehberi_icon.png"
+  
+  # Android Adaptive Icon Ayarları
+  # Adaptive icon, kullanıcının telefonunun temasına ve cihazının şekline göre
+  # otomatik olarak yuvarlak, kare, squircle vb. şekillere uyum sağlar.
+  # Bu sayede tüm Android cihazlarda responsive ve dinamik görünüm sağlanır.
+  
+  # Arka plan rengi - İkonunuzun arka planındaki beyaz renge uygun
+  adaptive_icon_background: "#FFFFFF"
+  
+  # Ön plan görseli - Bu, ikonunuzun ana kısmı (cami kubbesi ve kitap)
+  # Not: Adaptive icon'da kenarlardan kesileceği için önemli içerik 
+  # merkezde %66'lık alanda kalmalı (safe zone)
+  adaptive_icon_foreground: "assets/images/islam_rehberi_icon.png"
+  
+  # Responsive tasarım için min_sdk_android ayarı
+  min_sdk_android: 21  # Android 5.0 ve üzeri (adaptive icon desteği için)
