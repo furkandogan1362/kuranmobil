@@ -11,8 +11,10 @@ import '../widgets/surah_list_sheet.dart';
 import '../widgets/settings_menu_sheet.dart';
 import '../widgets/audio_player_widget.dart';
 import 'quran_reader/widgets/quran_reader_header.dart';
-import 'quran_reader/widgets/surah_header.dart';
-import 'quran_reader/widgets/verse_card.dart';
+import 'quran_reader/widgets/quran_reader_bottom_bar.dart';
+import 'quran_reader/widgets/quran_page_content.dart';
+import 'quran_reader/utils/scroll_manager.dart';
+import 'quran_reader/utils/navigation_helper.dart';
 
 class QuranReaderScreen extends StatefulWidget {
   final Function(String themeMode)? onThemeChanged;
@@ -25,14 +27,14 @@ class QuranReaderScreen extends StatefulWidget {
 
 class _QuranReaderScreenState extends State<QuranReaderScreen> {
   final QuranJsonService _jsonService = QuranJsonService();
+  final ScrollManager _scrollManager = ScrollManager();
+  final NavigationHelper _navigationHelper = NavigationHelper();
   late PageController _pageController;
   final ScrollController _paginationScrollController = ScrollController();
   // Sabit header'ı ölçmek için GlobalKey (başlık alt sınırına temas anını tespit edeceğiz)
   final GlobalKey _headerKey = GlobalKey();
   // Uzak sayfalara hızlı atlama sırasında yumuşak bir katman göstermek için
   bool _isJumpingFar = false;
-  static const int _farJumpThreshold =
-      1; // Bu kadar ve üzeri farkta anlık geçiş + fade kullan
 
   static const int totalPages = 604; // Kuran'ın toplam sayfa sayısı
 
@@ -60,10 +62,6 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
   // Oynatıcı durumu
   bool _isPlayerExpanded = false; // Oynatıcı açık mı?
   bool _isPlayerMinimized = false; // Oynatıcı minimize mi?
-
-  // Scroll pozisyonu kaydetme için debounce timer
-  Timer? _scrollSaveTimer;
-  static const Duration _scrollSaveDelay = Duration(milliseconds: 500);
 
   @override
   void initState() {
@@ -130,7 +128,11 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
       // Pagination scroll'u doğru konuma getir ve son scroll pozisyonuna git
       // Widget'ların build edilmesi için kısa bir gecikme ekleyelim
       WidgetsBinding.instance.addPostFrameCallback((_) async {
-        _scrollPaginationToPage(_currentPage);
+        _navigationHelper.scrollPaginationToPage(
+          pageNumber: _currentPage,
+          paginationScrollController: _paginationScrollController,
+          context: context,
+        );
 
         // Son okunan sayfanın kaydedilmiş scroll pozisyonuna git
         final scrollController = _pageScrollControllers[_currentPage];
@@ -266,75 +268,35 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
 
     // Pagination scroll pozisyonunu güncelle
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollPaginationToPage(pageNumber);
+      _navigationHelper.scrollPaginationToPage(
+        pageNumber: pageNumber,
+        paginationScrollController: _paginationScrollController,
+        context: context,
+      );
     });
   }
 
-  void _scrollPaginationToPage(int pageNumber) {
-    if (_paginationScrollController.hasClients) {
-      // Ekran genişliğinden hesapla
-      final screenWidth = MediaQuery.of(context).size.width;
-      final availableWidth = screenWidth - 24; // 12px padding her tarafta
-      
-      const visibleBoxCount = 9;
-      const spacing = 4.0;
-      const totalSpacing = spacing * (visibleBoxCount - 1);
-      
-      final boxWidth = (availableWidth - totalSpacing) / visibleBoxCount;
-      final itemWidth = boxWidth + spacing; // Kutu genişliği + spacing
-      
-      final rightPadding = spacing; // Sağdan boşluk
-      final position = (pageNumber - 1) * itemWidth + rightPadding;
-      
-      _paginationScrollController.animateTo(
-        position,
-        duration: Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    }
-  }
-
   void _goToPage(int pageNumber, {int? targetChapterId}) {
-    // Sayfayı kaydet
-    QuranJsonService.saveLastReadPage(pageNumber);
-
-    // Hedef sure ID'sini kaydet
-    _scrollToChapterId = targetChapterId;
-
-    final delta = (pageNumber - _currentPage).abs();
-    if (delta >= _farJumpThreshold) {
-      // Çok uzak sayfaya geçiş: Önceden veri yükle, anlık jump yap, üstüne hafif bir fade uygula
-      setState(() {
-        _isJumpingFar = true;
-      });
-      () async {
-        try {
-          // Hedef ve komşu sayfaları önceden yükle
-          await _loadPageData(pageNumber);
-          if (pageNumber > 1) _loadPageData(pageNumber - 1);
-          if (pageNumber < totalPages) _loadPageData(pageNumber + 1);
-          // Overlay'in görünmesi için mini bir frame beklet
-          await Future.delayed(const Duration(milliseconds: 30));
-          if (!mounted) return;
-          _pageController.jumpToPage(pageNumber - 1);
-          // İçerik yerleşsin, sonra overlay'i yumuşakça kaldır
-          await Future.delayed(const Duration(milliseconds: 120));
-        } finally {
-          if (mounted) {
-            setState(() {
-              _isJumpingFar = false;
-            });
-          }
+    _navigationHelper.goToPage(
+      targetPage: pageNumber,
+      currentPage: _currentPage,
+      pageController: _pageController,
+      targetChapterId: targetChapterId,
+      onScrollToChapterIdChanged: (chapterId) {
+        setState(() {
+          _scrollToChapterId = chapterId;
+        });
+      },
+      onJumpingStateChanged: (isJumping) {
+        if (mounted) {
+          setState(() {
+            _isJumpingFar = isJumping;
+          });
         }
-      }();
-    } else {
-      // Yakın sayfalara yumuşak animasyon
-      _pageController.animateToPage(
-        pageNumber - 1, // PageView index 0'dan başlar
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOutCubic,
-      );
-    }
+      },
+      loadPageData: (page) async => await _loadPageData(page),
+      totalPages: totalPages,
+    );
   }
 
   // Sure listesini göster
@@ -386,105 +348,39 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
     );
   }
 
+  
   // Sure başlangıcına scroll yap
   void _performScrollToChapter(int chapterId) {
-    if (_pageKeys[_currentPage]?.containsKey(chapterId) == true) {
-      final key = _pageKeys[_currentPage]![chapterId];
-      if (key?.currentContext != null) {
-        Scrollable.ensureVisible(
-          key!.currentContext!,
-          duration: Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-          alignment: 0.0,
-        );
-      }
-    }
-  }
-
-  // Scroll pozisyonunu kaydetmeyi zamanla (debouncing)
+    _navigationHelper.performScrollToChapter(
+      chapterId: chapterId,
+      currentPage: _currentPage,
+      pageKeys: _pageKeys,
+    );
+  }  // Scroll pozisyonunu kaydetmeyi zamanla (debouncing)
   void _scheduleScrollSave(int pageNumber) {
-    // Sadece mevcut sayfa için kaydet
-    if (pageNumber != _currentPage) return;
-
-    // Önceki timer'ı iptal et
-    _scrollSaveTimer?.cancel();
-
-    // Yeni timer başlat - 500ms sonra kaydet
-    _scrollSaveTimer = Timer(_scrollSaveDelay, () {
-      final scrollController = _pageScrollControllers[pageNumber];
-      if (scrollController != null && scrollController.hasClients) {
-        QuranJsonService.saveLastScrollPosition(
-          pageNumber,
-          scrollController.offset,
-        );
-      }
-    });
+    _scrollManager.scheduleScrollSave(
+      pageNumber: pageNumber,
+      currentPage: _currentPage,
+      pageScrollControllers: _pageScrollControllers,
+    );
   }
 
   // Scroll pozisyonuna göre görünür surenin ID'sini güncelle
   void _updateVisibleChapter(int pageNumber) {
-    if (pageNumber != _currentPage) return; // Sadece aktif sayfa için çalış
-
-    final scrollController = _pageScrollControllers[pageNumber];
-    if (scrollController == null || !scrollController.hasClients) return;
-
-    final pageKeysMap = _pageKeys[pageNumber];
-    if (pageKeysMap == null || pageKeysMap.isEmpty) return;
-
-    // Header'ın ekrandaki alt sınırını dinamik olarak ölç (sabit sayı kullanma)
-    double headerBottom = 0.0;
-    try {
-      final headerBox =
-          _headerKey.currentContext?.findRenderObject() as RenderBox?;
-      if (headerBox != null) {
-        final headerTop = headerBox.localToGlobal(Offset.zero).dy;
-        headerBottom = headerTop + headerBox.size.height;
-      }
-    } catch (_) {
-      // Ölçüm başarısız olursa, muhafazakar bir varsayılan kullan (ama mümkünse 0 bırak)
-      headerBottom = headerBottom == 0.0 ? 180.0 : headerBottom;
-    }
-    // Yüzen sayılar için çok küçük bir tolerans
-    const epsilon = 0.5;
-
-    // Her sure başlangıcının ekrandaki pozisyonunu kontrol et
-    int? newVisibleChapterId;
-    final positions = <MapEntry<int, double>>[];
-
-    // Mevcut sayfada render edilmiş tüm sure başlıklarının tepe (top) konumlarını topla
-    pageKeysMap.forEach((chapterId, key) {
-      final context = key.currentContext;
-      if (context != null) {
-        try {
-          final box = context.findRenderObject() as RenderBox;
-          final top = box.localToGlobal(Offset.zero).dy;
-          positions.add(MapEntry(chapterId, top));
-        } catch (_) {}
-      }
-    });
-
-    if (positions.isNotEmpty) {
-      // Ekrandaki konuma göre sırala (üstten alta)
-      positions.sort((a, b) => a.value.compareTo(b.value));
-      // Header altına GELEN veya TEMAS EDEN en son (ekrana göre en alttaki) başlığı seç
-      final underHeader = positions
-          .where((e) => e.value <= headerBottom + epsilon)
-          .toList();
-      if (underHeader.isNotEmpty) {
-        newVisibleChapterId = underHeader.last.key;
-      } else {
-        // Henüz bu sayfadaki hiçbir sure başlığı header'a temas etmediyse,
-        // sayfanın mevcut (ilk) suresini görünür kabul et
-        newVisibleChapterId = _pageChapters[pageNumber]?.id;
-      }
-    }
+    final newVisibleChapterId = _scrollManager.updateVisibleChapter(
+      pageNumber: pageNumber,
+      currentPage: _currentPage,
+      pageScrollControllers: _pageScrollControllers,
+      pageKeys: _pageKeys,
+      pageChapters: _pageChapters,
+      headerKey: _headerKey,
+    );
 
     // Eğer görünür sure değiştiyse, state'i güncelle
     if (newVisibleChapterId != null &&
         newVisibleChapterId != _currentVisibleChapterId) {
       setState(() {
         _currentVisibleChapterId = newVisibleChapterId;
-        // Sure listesinde vurgulanan sureyi de güncelle
         _lastSelectedChapterId = newVisibleChapterId;
       });
       
@@ -551,42 +447,13 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
   
   // Çalan ayete otomatik scroll
   void _scrollToPlayingVerse(int pageNumber, int surahId, int verseNumber) {
-    // 0. ayet (sure adı) için özel kontrol
-    if (verseNumber == 0) {
-      // SurahHeader'ın key'ini kullan
-      final surahHeaderKey = _pageKeys[pageNumber]?[surahId];
-      
-      if (surahHeaderKey?.currentContext != null) {
-        try {
-          Scrollable.ensureVisible(
-            surahHeaderKey!.currentContext!,
-            duration: Duration(milliseconds: 400),
-            curve: Curves.easeInOut,
-            alignment: 0.15, // Ekranın %15'inde göster (header'a yakın)
-          );
-        } catch (e) {
-          print('⚠️ SurahHeader scroll hatası: $e');
-        }
-      }
-      return;
-    }
-    
-    // Normal ayetler için
-    final verseKeyId = '${surahId}_$verseNumber';
-    final verseKey = _verseKeys[pageNumber]?[verseKeyId];
-    
-    if (verseKey?.currentContext != null) {
-      try {
-        Scrollable.ensureVisible(
-          verseKey!.currentContext!,
-          duration: Duration(milliseconds: 400),
-          curve: Curves.easeInOut,
-          alignment: 0.2, // Ekranın %20'sinde göster (header'dan sonra)
-        );
-      } catch (e) {
-        print('⚠️ Scroll hatası: $e');
-      }
-    }
+    _scrollManager.scrollToPlayingVerse(
+      pageNumber: pageNumber,
+      surahId: surahId,
+      verseNumber: verseNumber,
+      pageKeys: _pageKeys,
+      verseKeys: _verseKeys,
+    );
   }
 
   // Sesli meal oynatıcıyı aç/kapat
@@ -823,139 +690,13 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
   }
   
   Widget _buildBottomNavigationBar() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
     return Consumer<AudioService>(
       builder: (context, audioService, child) {
-        return Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: isDark
-                  ? [Color(0xFF302F30), Color(0xFF302F30)]
-                  : [Colors.white, Colors.grey.shade50],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.3 : 0.12),
-                blurRadius: 16,
-                offset: Offset(0, -4),
-                spreadRadius: 0,
-              ),
-            ],
-            border: Border(
-              top: BorderSide(
-                color: isDark ? Colors.white.withOpacity(0.1) : Colors.grey.shade200,
-                width: 1,
-              ),
-            ),
-          ),
-          child: SafeArea(
-            top: false, // Üstten SafeArea istemiyoruz
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  // Sesli Meal butonu
-                  Expanded(
-                    child: _buildNavBarItem(
-                      icon: Icons.volume_up_rounded,
-                      label: 'Sesli Meal',
-                      onTap: _startAudioPlayer,
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  // Ayarlar butonu
-                  Expanded(
-                    child: _buildNavBarItem(
-                      icon: Icons.settings_rounded,
-                      label: 'Ayarlar',
-                      onTap: _showFontSettings,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        return QuranReaderBottomBar(
+          onAudioPlayerTap: _startAudioPlayer,
+          onSettingsTap: _showFontSettings,
         );
       },
-    );
-  }
-  
-  Widget _buildNavBarItem({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: AnimatedContainer(
-        duration: Duration(milliseconds: 200),
-        padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: isDark
-                ? [
-                    Color(0xFF2E7D32).withOpacity(0.8),
-                    Color(0xFF43A047).withOpacity(0.8),
-                  ]
-                : [
-                    Color(0xFF2E7D32),
-                    Color(0xFF43A047),
-                  ],
-          ),
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Color(0xFF2E7D32).withOpacity(isDark ? 0.15 : 0.35),
-              blurRadius: 10,
-              offset: Offset(0, 3),
-              spreadRadius: 0,
-            ),
-            if (!isDark)
-              BoxShadow(
-                color: Colors.white.withOpacity(0.4),
-                blurRadius: 6,
-                offset: Offset(0, -1),
-                spreadRadius: 0,
-              ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                icon,
-                color: Colors.white,
-                size: 20,
-              ),
-            ),
-            SizedBox(width: 10),
-            Text(
-              label,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -968,6 +709,19 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
     // Bu sayfa için ayet key'lerini sakla
     if (!_verseKeys.containsKey(pageNumber)) {
       _verseKeys[pageNumber] = {};
+    }
+
+    // Sure başlangıç key'lerini oluştur
+    for (var verse in verses) {
+      if (verse.verseNumber == 1 && !_pageKeys[pageNumber]!.containsKey(verse.chapterId)) {
+        _pageKeys[pageNumber]![verse.chapterId] = GlobalKey();
+      }
+      
+      // Ayet key'lerini oluştur
+      final verseKeyId = '${verse.chapterId}_${verse.verseNumber}';
+      if (!_verseKeys[pageNumber]!.containsKey(verseKeyId)) {
+        _verseKeys[pageNumber]![verseKeyId] = GlobalKey();
+      }
     }
 
     // Bu sayfa için ScrollController oluştur (henüz yoksa)
@@ -984,142 +738,27 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
 
     final scrollController = _pageScrollControllers[pageNumber]!;
 
-    // Sayfadaki ayetleri gruplara ayır (sure başlangıçlarına göre)
-    List<Widget> pageContent = [];
-    int? lastChapterId;
-
-    for (var verse in verses) {
-      // Yeni bir sure başladı mı kontrol et
-      if (verse.chapterId != lastChapterId) {
-        // Sure değişti
-        if (verse.verseNumber == 1) {
-          // Sure başlangıcı için GlobalKey oluştur
-          final key = GlobalKey();
-          _pageKeys[pageNumber]![verse.chapterId] = key;
-          final chapterInfo = _chapterCache[verse.chapterId];
-          final surahName = chapterInfo?.nameTurkish ?? 'Yükleniyor...';
-          pageContent.add(
-            Consumer<AudioService>(
-              builder: (context, audioService, child) {
-                // 0. ayet (sure adı + besmele) çalınıyor mu kontrol et
-                final isPlayingZeroVerse = audioService.isAyahPlaying(verse.chapterId, 0);
-                
-                // 0. ayet çalınıyorsa scroll yap
-                if (isPlayingZeroVerse && pageNumber == _currentPage) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    _scrollToPlayingVerse(pageNumber, verse.chapterId, 0);
-                  });
-                }
-                
-                return SurahHeader(
-                  key: key,
-                  chapterId: verse.chapterId,
-                  surahName: surahName,
-                  showBesmele: true,
-                  isPlaying: isPlayingZeroVerse,
-                );
-              },
-            ),
-          );
+    return QuranPageContent(
+      pageNumber: pageNumber,
+      chapter: chapter,
+      verses: verses,
+      arabicFontSize: _arabicFontSize,
+      turkishFontSize: _turkishFontSize,
+      scrollController: scrollController,
+      pageKeys: _pageKeys[pageNumber]!,
+      verseKeys: _verseKeys[pageNumber]!,
+      chapterCache: _chapterCache,
+      scrollToChapterId: pageNumber == _currentPage ? _scrollToChapterId : null,
+      onScrollToChapterComplete: () {
+        setState(() {
+          _scrollToChapterId = null;
+        });
+      },
+      onScrollToPlayingVerse: (page, surahId, verseNumber) {
+        if (page == _currentPage) {
+          _scrollToPlayingVerse(page, surahId, verseNumber);
         }
-        lastChapterId = verse.chapterId;
-      }
-
-      // Ayet için GlobalKey oluştur
-      final verseKey = GlobalKey();
-      final verseKeyId = '${verse.chapterId}_${verse.verseNumber}';
-      _verseKeys[pageNumber]![verseKeyId] = verseKey;
-
-      // Ayeti ekle
-      pageContent.add(
-        Consumer<AudioService>(
-          builder: (context, audioService, child) {
-            // Bu ayet çalınıyor mu kontrol et - hem sure hem ayet numarasını kontrol et
-            final isPlaying = audioService.isAyahPlaying(verse.chapterId, verse.verseNumber);
-            
-            // Çalan ayete otomatik scroll
-            if (isPlaying && pageNumber == _currentPage) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _scrollToPlayingVerse(pageNumber, verse.chapterId, verse.verseNumber);
-              });
-            }
-            
-            return VerseCard(
-              key: verseKey,
-              verse: verse,
-              arabicFontSize: _arabicFontSize,
-              turkishFontSize: _turkishFontSize,
-              isPlaying: isPlaying,
-              onDoubleTap: () async {
-                // Çift tıklama ile ayet seslendirilsin
-                final audioService = Provider.of<AudioService>(context, listen: false);
-                
-                // Mevcut sayfadaki tüm chapter'ları al
-                final chapters = <int, Chapter>{};
-                if (_pageVerses[pageNumber] != null) {
-                  for (final v in _pageVerses[pageNumber]!) {
-                    if (!chapters.containsKey(v.chapterId) && _chapterCache.containsKey(v.chapterId)) {
-                      chapters[v.chapterId] = _chapterCache[v.chapterId]!;
-                    }
-                  }
-                }
-                
-                // Ayeti çal
-                await audioService.playAyah(
-                  verse.chapterId,
-                  verse.verseNumber,
-                  totalAyahs: chapters[verse.chapterId]?.versesCount ?? 0,
-                  chapters: chapters,
-                  skipSurahName: verse.verseNumber != 1, // 1. ayet değilse sure adını atla
-                );
-              },
-            );
-          },
-        ),
-      );
-    }
-
-    // Eğer hedef sure ID'si varsa ve bu sayfada varsa, scroll yap
-    if (_scrollToChapterId != null &&
-        _pageKeys[pageNumber]?.containsKey(_scrollToChapterId) == true) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final key = _pageKeys[pageNumber]![_scrollToChapterId];
-        if (key?.currentContext != null) {
-          Scrollable.ensureVisible(
-            key!.currentContext!,
-            duration: Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-            alignment: 0.0, // En üste scroll et
-          );
-          // Hedef sure ID'sini temizle
-          setState(() {
-            _scrollToChapterId = null;
-          });
-        }
-      });
-    }
-
-    return SingleChildScrollView(
-      controller: scrollController,
-      padding: EdgeInsets.all(24),
-      child: Column(
-        children: [
-          ...pageContent,
-
-          // Sayfa numarası (alt kısım)
-          Padding(
-            padding: const EdgeInsets.only(top: 16, bottom: 8),
-            child: Text(
-              '$pageNumber',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2E7D32),
-              ),
-            ),
-          ),
-        ],
-      ),
+      },
     );
   }
 
@@ -1128,8 +767,8 @@ class _QuranReaderScreenState extends State<QuranReaderScreen> {
     _pageController.dispose();
     _paginationScrollController.dispose();
 
-    // Scroll save timer'ını iptal et
-    _scrollSaveTimer?.cancel();
+    // Scroll manager'ı temizle
+    _scrollManager.dispose();
 
     // Tüm sayfa ScrollController'larını temizle
     for (var controller in _pageScrollControllers.values) {

@@ -10,7 +10,7 @@
         android:maxSdkVersion="32" />
     
     <application
-        android:label="kuranmobil"
+        android:label="İslam Rehberi"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
