@@ -9,7 +9,7 @@ class ViewSettingsService {
   static const String dynamicView = 'dynamic'; // Dinamik görünüm (yeni)
   
   // Varsayılan görünüm
-  static const String defaultViewMode = wideView;
+  static const String defaultViewMode = dynamicView;
   
   /// Görünüm modunu kaydet
   static Future<void> saveViewMode(String mode) async {
